@@ -24,12 +24,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import random
+from typing import List
 
 import cv2
 import numpy as np
 from tensorflow import keras
 
-from . import train
+from .train import bbox_iou
 from ..common import media
 from ..common.config import YOLOConfig
 from ..common.parser import parse_dataset
@@ -42,70 +43,133 @@ class YOLODataset(keras.utils.Sequence):
         dataset_path: str,
         dataset_type: str = "converted_coco",
         image_path_prefix: str = "",
+        training: bool = False,
     ):
+        self._config = config
         self._dataset = parse_dataset(
             dataset_path=dataset_path,
             dataset_type=dataset_type,
             image_path_prefix=image_path_prefix,
         )
+        np.random.shuffle(self._dataset)
 
-    def bboxes_to_ground_truth(self, bboxes):
+        # Etc ##################################################################
+
+        self._num_yolo = config.count["yolo"]
+
+        self._anchors = []
+        for i in range(self._num_yolo):
+            name = f"yolo{i}"
+            self._anchors.append([])
+            for mask in config[name]["mask"]:
+                aw, ah = config[f"yolo{i}"]["anchors"][mask]
+                self._anchors[i].append(
+                    (aw / config["net"]["width"], ah / config["net"]["width"])
+                )
+
+        # Data augmentation ####################################################
+
+        self._augmentation: List[str] = []
+        if config["net"]["mosaic"]:
+            self._augmentation.append("mosaic")
+
+        self.batch_size = self._config["net"]["batch"]
+
+        if training and len(self._augmentation) > 0:
+            self.augmentation_batch_size = int(
+                self._config["net"]["batch"] * 0.3
+            )
+            self._training = True
+        else:
+            self.augmentation_batch_size = 0
+            self._training = False
+
+        # Grid #################################################################
+
+        self._strides = tuple(
+            round(
+                np.sqrt(
+                    config["net"]["height"]
+                    * config["net"]["width"]
+                    / (output_shape[1] / 3)
+                ).item()
+            )
+            for output_shape in config.output_shape
+        )
+
+        self._grid_shapes = tuple(
+            (
+                1,
+                config["net"]["height"] // stride,
+                config["net"]["width"] // stride,
+                3,
+                5 + len(config.names),
+            )
+            for stride in self._strides
+        )
+
+        self._grid_xy_list = [
+            np.tile(
+                np.reshape(
+                    np.stack(
+                        np.meshgrid(
+                            (np.arange(grid_shape[1]) + 0.5) / grid_shape[1],
+                            (np.arange(grid_shape[2]) + 0.5) / grid_shape[2],
+                        ),
+                        axis=-1,
+                    ),
+                    (1, grid_shape[1], grid_shape[2], 1, 2),
+                ),
+                (1, 1, 1, 3, 1),
+            ).astype(np.float32)
+            for grid_shape in self._grid_shapes
+        ]
+
+    def _convert_bboxes_to_ground_truth(self, bboxes):
         """
         @param bboxes: [[b_x, b_y, b_w, b_h, class_id], ...]
 
-        @return [s, m, l] or [s, l]
-            Dim(1, grid_y, grid_x, anchors,
+        @return [yolo0, yolo1, ...]
+            Dim(1, grid_y * grid_x * anchors,
                                 (b_x, b_y, b_w, b_h, conf, prob_0, prob_1, ...))
         """
         ground_truth = [
             np.zeros(
-                (
-                    1,
-                    _size[0],
-                    _size[1],
-                    3,
-                    5 + self.num_classes,
-                ),
+                grid_shape,
                 dtype=np.float32,
             )
-            for _size in self.grid_size
+            for grid_shape in self._grid_shapes
         ]
 
-        for i, _grid in enumerate(self.grid_xy):
-            ground_truth[i][..., 0:2] = _grid
+        for i in range(self._num_yolo):
+            ground_truth[i][..., 0:2] = self._grid_xy_list[i]
 
         for bbox in bboxes:
-            # [b_x, b_y, b_w, b_h, class_id]
+            # bbox: [b_x, b_y, b_w, b_h, class_id]
             xywh = np.array(bbox[:4], dtype=np.float32)
             class_id = int(bbox[4])
 
-            # smooth_onehot = [0.xx, ... , 1-(0.xx*(n-1)), 0.xx, ...]
-            onehot = np.zeros(self.num_classes, dtype=np.float32)
+            # prob_0, prob_1, ...
+            onehot = np.zeros(len(self._config.names), dtype=np.float32)
             onehot[class_id] = 1.0
-            uniform_distribution = np.full(
-                self.num_classes, 1.0 / self.num_classes, dtype=np.float32
-            )
-            smooth_onehot = (
-                1 - self.label_smoothing
-            ) * onehot + self.label_smoothing * uniform_distribution
 
             ious = []
             exist_positive = False
-            for i in range(len(self.grid_xy)):
+            for i in range(self._num_yolo):
                 # Dim(anchors, xywh)
                 anchors_xywh = np.zeros((3, 4), dtype=np.float32)
                 anchors_xywh[:, 0:2] = xywh[0:2]
-                anchors_xywh[:, 2:4] = self.anchors_ratio[i]
-                iou = train.bbox_iou(xywh, anchors_xywh)
+                anchors_xywh[:, 2:4] = self._anchors[i]
+                iou = bbox_iou(xywh, anchors_xywh)
                 ious.append(iou)
+                # iou threshold
                 iou_mask = iou > 0.3
 
                 if np.any(iou_mask):
-                    xy_grid = xywh[0:2] * (
-                        self.grid_size[i][1],
-                        self.grid_size[i][0],
+                    xy_index = xywh[0:2] * (
+                        self._grid_shapes[i][1],  # width
+                        self._grid_shapes[i][0],  # height
                     )
-                    xy_index = np.floor(xy_grid)
 
                     exist_positive = True
                     for j, mask in enumerate(iou_mask):
@@ -113,118 +177,116 @@ class YOLODataset(keras.utils.Sequence):
                             _x, _y = int(xy_index[0]), int(xy_index[1])
                             ground_truth[i][0, _y, _x, j, 0:4] = xywh
                             ground_truth[i][0, _y, _x, j, 4:5] = 1.0
-                            ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
+                            ground_truth[i][0, _y, _x, j, 5:] = onehot
 
             if not exist_positive:
                 index = np.argmax(np.array(ious))
                 i = index // 3
                 j = index % 3
 
-                xy_grid = xywh[0:2] * (
-                    self.grid_size[i][1],
-                    self.grid_size[i][0],
+                xy_index = xywh[0:2] * (
+                    self._grid_shapes[i][1],  # width
+                    self._grid_shapes[i][0],  # height
                 )
-                xy_index = np.floor(xy_grid)
 
                 _x, _y = int(xy_index[0]), int(xy_index[1])
                 ground_truth[i][0, _y, _x, j, 0:4] = xywh
                 ground_truth[i][0, _y, _x, j, 4:5] = 1.0
-                ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
+                ground_truth[i][0, _y, _x, j, 5:] = onehot
 
-        return ground_truth
+        return [np.reshape(gt, (1, -1, gt.shape[-1])) for gt in ground_truth]
 
-    def load_image_then_resize(self, dataset, output_size=None):
+    def _convert_dataset_to_image_and_bboxes(self, dataset):
         """
         @param dataset: [image_path, [[x, y, w, h, class_id], ...]]
 
-        @return image / 255, bboxes
+        @return image, bboxes
+            image: 0.0 ~ 1.0, Dim(1, height, width, channels)
         """
         # pylint: disable=bare-except
         try:
             image = cv2.imread(dataset[0])
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         except:
-            return None
-
-        if output_size is None:
-            output_size = self.input_size
+            return None, None
 
         resized_image, resized_bboxes = media.resize_image(
-            image, output_size, dataset[1]
+            image,
+            target_shape=self._config.input_shape,
+            ground_truth=dataset[1],
         )
         resized_image = np.expand_dims(resized_image / 255.0, axis=0)
 
         return resized_image, resized_bboxes
 
-    def _next_data(self):
-        for _ in range(5):
-            _dataset = self.dataset[self.count]
-            self.count += 1
-            if self.count == len(self.dataset):
-                if self.data_augmentation:
-                    np.random.shuffle(self.dataset)
-                self.count = 0
-
-            ret = self.load_image_then_resize(_dataset)
-            if ret is not None:
-                return ret
+    def _get_dataset(self, index: int):
+        offset = 0
+        for offset in range(5):
+            image, bboxes = self._convert_dataset_to_image_and_bboxes(
+                self._dataset[(index + offset) % len(self._dataset)]
+            )
+            if image is None:
+                offset += 1
+            else:
+                return image, bboxes
 
         raise FileNotFoundError("Failed to find images")
 
-    def _next_random_augmentation_data(self):
-        if random.random() < 0.2:
-            _prob = random.random()
-            if _prob < 0.25:
-                _dataset = cut_out(self._next_data())
-            elif _prob < 0.5:
-                _dataset = mix_up(self._next_data(), self._next_data())
-            else:
-                _dataset = mosaic(*[self._next_data() for _ in range(4)])
-        else:
-            _dataset = self._next_data()
-
-        return _dataset
-
-    def __iter__(self):
-        self.count = 0
-        if self.data_augmentation:
-            np.random.shuffle(self.dataset)
-        return self
-
-    def __next__(self):
+    def __getitem__(self, index):
         """
-        @return image, ground_truth
-            ground_truth == (s_truth, m_truth, l_truth) or (s_truth, l_truth)
+        @return
+            images: Dim(batch, height, width, channels)
+            ground_truth: Dim(batch, -1, 5 + len(names))
         """
-        if self.batch_size > 1:
-            batch_x = []
-            _batch_y = [[] for _ in range(len(self.grid_size))]
-            for _ in range(self.batch_size):
-                if self.data_augmentation:
-                    _dataset = self._next_random_augmentation_data()
-                else:
-                    _dataset = self._next_data()
-                x = _dataset[0]
-                y = self.bboxes_to_ground_truth(_dataset[1])
-                batch_x.append(x)
-                for i, _y in enumerate(y):
-                    _batch_y[i].append(_y)
-            batch_x = np.concatenate(batch_x, axis=0)
-            batch_y = [np.concatenate(b_y, axis=0) for b_y in _batch_y]
-        else:
-            if self.data_augmentation:
-                _dataset = self._next_random_augmentation_data()
-            else:
-                _dataset = self._next_data()
-            batch_x = _dataset[0]
-            batch_y = self.bboxes_to_ground_truth(_dataset[1])
 
-        # batch_x == Dim(batch, input_size, input_size, channels)
-        # batch_y[0] == Dim(batch, grid_size, grid_size, anchors, bboxes)
-        return batch_x, batch_y
+        batch_x = []
+        batch_y = [[] for _ in range(self._num_yolo)]
+
+        start_index = index * self.batch_size
+
+        for i in range(self.batch_size - self.augmentation_batch_size):
+            image, bboxes = self._get_dataset(start_index + i)
+
+            batch_x.append(image)
+            for j, gt in enumerate(
+                self._convert_bboxes_to_ground_truth(bboxes)
+            ):
+                batch_y[j].append(gt)
+
+        for i in range(self.augmentation_batch_size):
+            augmentation = self._augmentation[
+                random.randrange(0, len(self._augmentation))
+            ]
+
+            image = None
+            bboxes = None
+            if augmentation == "mosaic":
+                image, bboxes = mosaic(
+                    *[
+                        self._get_dataset(
+                            start_index + random.randrange(0, self.batch_size)
+                        )
+                        for _ in range(4)
+                    ]
+                )
+
+            batch_x.append(image)
+            for j, gt in enumerate(
+                self._convert_bboxes_to_ground_truth(bboxes)
+            ):
+                batch_y[j].append(gt)
+
+        if index == len(self) - 1:
+            np.random.shuffle(self._dataset)
+
+        return np.concatenate(batch_x, axis=0), [
+            np.concatenate(y, axis=0) for y in batch_y
+        ]
 
     def __len__(self):
-        return len(self.dataset)
+        return len(self._dataset) // (
+            self.batch_size - self.augmentation_batch_size
+        )
 
 
 def cut_out(dataset):

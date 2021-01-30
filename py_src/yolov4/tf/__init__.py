@@ -29,7 +29,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from . import dataset, train, weights
+from . import train, weights
+from .dataset import YOLODataset
 from .model import YOLOv4Model
 from ..common.base_class import BaseClass
 
@@ -49,6 +50,7 @@ class YOLOv4(BaseClass):
         _input = keras.layers.Input(self.config.input_shape)
         self._model = YOLOv4Model(self.config)
         self._model(_input)
+        self.config.output_shape = self._model.output_shape
 
     def load_weights(self, weights_path: str, weights_type: str = "tf"):
         """
@@ -84,9 +86,9 @@ class YOLOv4(BaseClass):
 
     def save_as_tflite(
         self,
-        tflite_path,
-        quantization=None,
-        data_set=None,
+        tflite_path: str,
+        quantization: str = "",
+        dataset: YOLODataset = None,
         num_calibration_steps: int = 100,
     ):
         """
@@ -95,9 +97,9 @@ class YOLOv4(BaseClass):
         Usage:
             yolo.save_as_tflite("yolov4.tflite")
             yolo.save_as_tflite("yolov4-float16.tflite", "float16")
-            yolo.save_as_tflite("yolov4-int.tflite", "int", data_set)
+            yolo.save_as_tflite("yolov4-int.tflite", "int", dataset)
         """
-        converter = tf.lite.TFLiteConverter.from_keras_model(self.model)
+        converter = tf.lite.TFLiteConverter.from_keras_model(self._model)
 
         _supported_ops = [
             tf.lite.OpsSet.TFLITE_BUILTINS,
@@ -107,14 +109,14 @@ class YOLOv4(BaseClass):
         def representative_dataset_gen():
             count = 0
             while True:
-                images, _ = next(data_set)
-                for i in range(len(images)):
-                    yield [tf.cast(images[i : i + 1, ...], tf.float32)]
-                    count += 1
-                    if count >= num_calibration_steps:
-                        return
+                for images, _ in dataset:
+                    for i in range(len(images)):
+                        yield [tf.cast(images[i : i + 1, ...], tf.float32)]
+                        count += 1
+                        if count >= num_calibration_steps:
+                            return
 
-        if quantization:
+        if quantization != "":
             converter.optimizations = [tf.lite.Optimize.DEFAULT]
 
         if quantization == "float16":
@@ -127,9 +129,9 @@ class YOLOv4(BaseClass):
             _supported_ops += [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
             converter.inference_input_type = tf.uint8
             converter.inference_output_type = tf.uint8
-        elif quantization:
+        else:
             raise ValueError(
-                "YOLOv4: {} is not a valid option".format(quantization)
+                f"YOLOv4: '{quantization}' is not a valid quantization"
             )
 
         converter.target_spec.supported_ops = _supported_ops
@@ -192,24 +194,17 @@ class YOLOv4(BaseClass):
 
     def load_dataset(
         self,
-        dataset_path,
-        dataset_type="converted_coco",
-        label_smoothing=0.1,
-        image_path_prefix=None,
-        training=True,
-    ):
-        return dataset.Dataset(
-            anchors=self.anchors,
-            batch_size=self.batch_size,
+        dataset_path: str,
+        dataset_type: str = "converted_coco",
+        image_path_prefix: str = "",
+        training: bool = False,
+    ) -> YOLODataset:
+        return YOLODataset(
+            config=self.config,
             dataset_path=dataset_path,
             dataset_type=dataset_type,
-            data_augmentation=training,
-            input_size=self.input_size,
-            label_smoothing=label_smoothing,
-            num_classes=len(self.classes),
             image_path_prefix=image_path_prefix,
-            strides=self.strides,
-            xyscales=self.xyscales,
+            training=training,
         )
 
     def compile(
