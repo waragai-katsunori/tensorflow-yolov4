@@ -21,7 +21,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+from os import path
+import random
 from typing import Any, Dict
+
+import numpy as np
 
 
 def parse_cfg(cfg_path: str) -> Dict[str, Any]:
@@ -157,7 +161,7 @@ def parse_cfg(cfg_path: str) -> Dict[str, Any]:
                                 value = _value
                 except KeyError as error:
                     raise RuntimeError(
-                        f"cfg_parser: [{layer_name}] '{option}' is not"
+                        f"parse_cfg: [{layer_name}] '{option}' is not"
                         " supported."
                     ) from error
 
@@ -183,3 +187,93 @@ def parse_names(names_path: str) -> Dict[int, str]:
                 index += 1
 
     return names
+
+
+def parse_dataset(
+    dataset_path: str,
+    dataset_type: str = "converted_coco",
+    image_path_prefix: str = "",
+):
+    """
+    x: center x 0.0 ~ 1.0
+    y: center y 0.0 ~ 1.0
+    @return [
+                [
+                    image_path,
+                    [
+                        [x, y, w, h, class_id]
+                        ,
+                        ...
+                    ]
+                ],
+                ...
+            ]
+    """
+    dataset = []
+
+    with open(dataset_path, "r") as fd:
+        lines = fd.readlines()
+
+        if dataset_type == "converted_coco":
+            for line in lines:
+                # line: "<image_path> class_id,x,y,w,h ..."
+                bboxes = line.strip().split()
+
+                image_path = bboxes[0]
+                if image_path_prefix != "":
+                    image_path = path.join(image_path_prefix, image_path)
+
+                xywhc_s = np.zeros((len(bboxes) - 1, 5))
+                for i, bbox in enumerate(bboxes[1:]):
+                    # bbox = class_id,x,y,w,h
+                    bbox = list(map(float, bbox.split(",")))
+                    xywhc_s[i, :] = (
+                        *bbox[1:],
+                        bbox[0],
+                    )
+
+                dataset.append([image_path, xywhc_s])
+
+        elif dataset_type == "yolo":
+            for line in lines:
+                # line: "<image_path>"
+                image_path = line.strip()
+                if image_path_prefix != "":
+                    image_path = path.join(image_path_prefix, image_path)
+
+                root, _ = path.splitext(image_path)
+                with open(root + ".txt") as fd2:
+                    bboxes = fd2.readlines()
+                    xywhc_s = np.zeros((len(bboxes), 5))
+                    for i, bbox in enumerate(bboxes):
+                        # bbox = class_id x y w h
+                        bbox = bbox.strip()
+                        bbox = list(map(float, bbox.split(" ")))
+                        xywhc_s[i, :] = (
+                            *bbox[1:],
+                            bbox[0],
+                        )
+                    dataset.append([image_path, xywhc_s])
+
+    if len(dataset) == 0:
+        raise RuntimeError(
+            f"parse_dataset: There is no dataset in '{dataset_path}'."
+        )
+
+    # Select 5 sets randomly and check the data format
+    for _ in range(5):
+        first_bbox = dataset[random.randint(0, len(dataset) - 1)][1][0]
+        for i in range(4):
+            if first_bbox[i] < 0 or first_bbox[i] > 1:
+                raise RuntimeError(
+                    "parse_dataset: 'center_x', 'center_y', 'width', and"
+                    " 'height' are between 0.0 and 1.0."
+                )
+
+        if int(first_bbox[4]) < 0:
+            raise RuntimeError(
+                "parse_dataset: 'class_id' is an integer greater than or equal"
+                " to 0."
+            )
+
+    return dataset

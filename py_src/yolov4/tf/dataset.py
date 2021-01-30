@@ -23,94 +23,31 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from os import path
 import random
-from typing import Union
 
 import cv2
 import numpy as np
+from tensorflow import keras
 
 from . import train
 from ..common import media
+from ..common.config import YOLOConfig
+from ..common.parser import parse_dataset
 
 
-class Dataset:
+class YOLODataset(keras.utils.Sequence):
     def __init__(
         self,
-        dataset_path: str = None,
+        config: YOLOConfig,
+        dataset_path: str,
         dataset_type: str = "converted_coco",
-        image_path_prefix: str = None,
+        image_path_prefix: str = "",
     ):
-        # TODO
-        pass
-
-    def load_dataset(self):
-        """
-        @return [[image_path, [[x, y, w, h, class_id], ...]], ...]
-        """
-        _dataset = []
-
-        with open(self.dataset_path, "r") as fd:
-            txt = fd.readlines()
-            if self.dataset_type == "converted_coco":
-                for line in txt:
-                    # line: "<image_path> class_id,x,y,w,h ..."
-                    bboxes = line.strip().split()
-                    image_path = bboxes[0]
-                    if self.image_path_prefix:
-                        image_path = path.join(
-                            self.image_path_prefix, image_path
-                        )
-                    xywhc_s = np.zeros((len(bboxes) - 1, 5))
-                    for i, bbox in enumerate(bboxes[1:]):
-                        # bbox = class_id,x,y,w,h
-                        bbox = list(map(float, bbox.split(",")))
-                        xywhc_s[i, :] = (
-                            *bbox[1:],
-                            bbox[0],
-                        )
-                    _dataset.append([image_path, xywhc_s])
-
-            elif self.dataset_type == "yolo":
-                for line in txt:
-                    # line: "<image_path>"
-                    image_path = line.strip()
-                    if self.image_path_prefix:
-                        image_path = path.join(
-                            self.image_path_prefix, image_path
-                        )
-                    root, _ = path.splitext(image_path)
-                    with open(root + ".txt") as fd2:
-                        bboxes = fd2.readlines()
-                        xywhc_s = np.zeros((len(bboxes), 5))
-                        for i, bbox in enumerate(bboxes):
-                            # bbox = class_id x y w h
-                            bbox = bbox.strip()
-                            bbox = list(map(float, bbox.split(" ")))
-                            xywhc_s[i, :] = (
-                                *bbox[1:],
-                                bbox[0],
-                            )
-                        _dataset.append([image_path, xywhc_s])
-
-        if len(_dataset) == 0:
-            raise FileNotFoundError("Failed to find images")
-
-        # Select 5 sets randomly and check the data format
-        for _ in range(5):
-            _bbox = _dataset[random.randint(0, len(_dataset) - 1)][1][0]
-            for i in range(4):
-                if _bbox[i] < 0 or _bbox[i] > 1:
-                    raise ValueError(
-                        "`center_x`, `center_y`, `width`and `height` are "
-                        "between 0.0 and 1.0."
-                    )
-            if not -1e-6 < _bbox[4] - int(_bbox[4]) < 1e-6:
-                raise ValueError(
-                    "`class_id` is an integer greater than or equal to 0."
-                )
-
-        return _dataset
+        self._dataset = parse_dataset(
+            dataset_path=dataset_path,
+            dataset_type=dataset_type,
+            image_path_prefix=image_path_prefix,
+        )
 
     def bboxes_to_ground_truth(self, bboxes):
         """
