@@ -146,18 +146,10 @@ class YOLOv4(BaseClass):
 
     @tf.function
     def _predict(self, x):
-        # s_pred, m_pred, l_pred
-        # x_pred == Dim(1, output_size, output_size, anchors, (bbox))
-        candidates = self.model(x, training=False)
-        _candidates = []
-        for candidate in candidates:
-            grid_size = candidate.shape[1:3]
-            _candidates.append(
-                tf.reshape(
-                    candidate[0], shape=(1, grid_size[0] * grid_size[1] * 3, -1)
-                )
-            )
-        return tf.concat(_candidates, axis=1)
+        candidates = self._model(x, training=False)
+        # [yolo0, yolo1, ...]
+        # yolo == Dim(1, output_size * output_size * anchors, (bbox))
+        return tf.concat(candidates, axis=1)
 
     def predict(
         self,
