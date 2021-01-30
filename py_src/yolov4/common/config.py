@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from typing import Any, Dict, ItemsView, KeysView, Tuple, ValuesView
+from typing import Any, Dict, ItemsView, KeysView, List, Tuple, ValuesView
 
 from . import parser
 
@@ -31,6 +31,8 @@ class YOLOConfig:
         self._cfg: Dict[str, Any] = {}
         self._count: Dict[str, int]
         self._names: Dict[int, str] = {}
+
+        self.output_shape: List[tuple]
 
     # Parse ####################################################################
 
