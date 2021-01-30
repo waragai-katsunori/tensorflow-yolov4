@@ -45,12 +45,12 @@ for i in range(256):
 
 def resize_image(
     image: np.ndarray,
-    target_size: Union[list, tuple],
+    target_shape: Union[list, tuple],
     ground_truth: np.ndarray = None,
 ):
     """
     @param `image`:        Dim(height, width, channels)
-    @param `target_size`:  (width, height)
+    @param `target_shape`:  (height, width, ...)
     @param `ground_truth`: [[center_x, center_y, w, h, class_id], ...]
 
     @return resized_image or (resized_image, resized_ground_truth)
@@ -61,11 +61,13 @@ def resize_image(
                                                                 ground_truth)
     """
     height, width, _ = image.shape
+    target_height = target_shape[0]
+    target_width = target_shape[1]
 
-    if width / height >= target_size[0] / target_size[1]:
-        scale = target_size[0] / width
+    if width / height >= target_width / target_height:
+        scale = target_width / width
     else:
-        scale = target_size[1] / height
+        scale = target_height / height
 
     # Resize
     if scale != 1:
@@ -76,15 +78,15 @@ def resize_image(
         resized_image = np.copy(image)
 
     # Pad
-    dw = target_size[0] - width
-    dh = target_size[1] - height
+    dw = target_width - width
+    dh = target_height - height
 
     if not (dw == 0 and dh == 0):
         dw = dw // 2
         dh = dh // 2
         # height, width, channels
         padded_image = np.full(
-            (target_size[1], target_size[0], 3), 255, dtype=np.uint8
+            (target_height, target_width, 3), 255, dtype=np.uint8
         )
         padded_image[dh : height + dh, dw : width + dw, :] = resized_image
     else:
@@ -97,11 +99,11 @@ def resize_image(
     ground_truth = np.copy(ground_truth)
 
     if dw > dh:
-        scale = width / target_size[0]
+        scale = width / target_width
         ground_truth[:, 0] = scale * (ground_truth[:, 0] - 0.5) + 0.5
         ground_truth[:, 2] = scale * ground_truth[:, 2]
     elif dw < dh:
-        scale = height / target_size[1]
+        scale = height / target_height
         ground_truth[:, 1] = scale * (ground_truth[:, 1] - 0.5) + 0.5
         ground_truth[:, 3] = scale * ground_truth[:, 3]
 
