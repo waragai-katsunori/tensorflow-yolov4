@@ -29,12 +29,13 @@ from . import parser
 class YOLOConfig:
     def __init__(self):
         self._cfg: Dict[str, Any] = {}
+        self._count: Dict[str, int]
         self._names: Dict[int, str] = {}
 
     # Parse ####################################################################
 
     def parse_cfg(self, cfg_path: str):
-        self._cfg = parser.parse_cfg(cfg_path=cfg_path)
+        self._cfg, self._count = parser.parse_cfg(cfg_path=cfg_path)
         if len(self._names) != 0:
             if self._cfg["yolo0"]["classes"] != len(self._names):
                 raise RuntimeError(
@@ -52,6 +53,14 @@ class YOLOConfig:
                 )
 
     # Property #################################################################
+
+    @property
+    def count(self) -> Dict[str, int]:
+        """
+        key: layer_type
+        value: the number of layers of the same type
+        """
+        return self._count
 
     @property
     def input_shape(self) -> Tuple[int, int, int]:

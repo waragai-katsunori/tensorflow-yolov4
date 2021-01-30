@@ -23,12 +23,12 @@ SOFTWARE.
 """
 from os import path
 import random
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import numpy as np
 
 
-def parse_cfg(cfg_path: str) -> Dict[str, Any]:
+def parse_cfg(cfg_path: str) -> Tuple[Dict[str, Any], Dict[str, int]]:
     layer_meta = {
         "net": {
             "batch": "int",
@@ -167,10 +167,9 @@ def parse_cfg(cfg_path: str) -> Dict[str, Any]:
 
                 config[layer_name][option] = value
 
-    # count[layer_type] += 1
-    # print(count)
+    count[layer_type] += 1
 
-    return config
+    return config, count
 
 
 def parse_names(names_path: str) -> Dict[int, str]:
