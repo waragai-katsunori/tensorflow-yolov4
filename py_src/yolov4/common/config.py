@@ -28,7 +28,7 @@ from . import parser
 
 class YOLOConfig:
     def __init__(self):
-        self._cfg: Dict[str, Any] = {}
+        self._cfg: Dict[str, Dict[str, Any]] = {}
         self._count: Dict[str, int]
         self._names: Dict[int, str] = {}
 

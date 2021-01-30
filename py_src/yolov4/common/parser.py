@@ -28,7 +28,9 @@ from typing import Any, Dict, Tuple
 import numpy as np
 
 
-def parse_cfg(cfg_path: str) -> Tuple[Dict[str, Any], Dict[str, int]]:
+def parse_cfg(
+    cfg_path: str,
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, int]]:
     layer_meta = {
         "net": {
             "batch": "int",
@@ -92,7 +94,7 @@ def parse_cfg(cfg_path: str) -> Tuple[Dict[str, Any], Dict[str, int]]:
         },
     }
 
-    config: Dict[str, Any] = {}
+    config: Dict[str, Dict[str, Any]] = {}
     count: Dict[str, int] = {
         "convolutional": 0,
         "maxpool": 0,
