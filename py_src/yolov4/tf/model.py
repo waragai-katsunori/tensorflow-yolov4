@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Tuple
 
 import tensorflow as tf
 from tensorflow import keras
@@ -93,7 +93,9 @@ class YOLOv4Model(keras.Model):
                 )
 
             elif layer_option["type"] == "yolo":
-                self._model_layers.append(lambda x: x)
+                self._model_layers.append(
+                    YOLOv3Head(config=self._model_config, name=layer_name)
+                )
 
             elif layer_option["type"] == "net":
                 _l2 = keras.regularizers.L2(
@@ -140,6 +142,73 @@ class YOLOv4Model(keras.Model):
                     return_val.append(output[layer_number])
 
         return return_val
+
+
+class YOLOv3Head(keras.Model):
+    def __init__(self, config: YOLOConfig, name: str):
+        super().__init__(name=name)
+
+        self._anchors = tuple(
+            config[self.name]["anchors"][mask]
+            for mask in config[self.name]["mask"]
+        )
+
+        self._grid_coord: Tuple[tuple]
+
+        self._inver_grid_wh: Tuple[float, float]
+
+        self._inver_image_wh = (
+            1 / config["net"]["width"],
+            1 / config["net"]["height"],
+        )
+
+        self._return_shape: Tuple[int, int, int]
+
+        self._scale_x_y = config[self.name]["scale_x_y"]
+
+    def build(self, grid_shape):
+        _, grid_height, grid_width, filters = grid_shape
+
+        grid_coord = []
+        for y in range(grid_height):
+            grid_coord.append([])
+            for x in range(grid_width):
+                grid_coord[y].append((x / grid_width, y / grid_height))
+            grid_coord[y] = tuple(grid_coord[y])
+
+        self._grid_coord = tuple(grid_coord)
+
+        self._inver_grid_wh = (1 / grid_width, 1 / grid_height)
+
+        self._return_shape = (-1, grid_height * grid_width, filters // 3)
+
+    def call(self, x):
+        raw_split = tf.split(x, 3, axis=-1)
+
+        sig = keras.activations.sigmoid(x)
+        sig_split = tf.split(sig, 3, axis=-1)
+
+        output = []
+        for i in range(3):
+
+            # Operation not supported on Edge TPU
+            xy, _, oc = tf.split(sig_split[i], [2, 2, -1], axis=-1)
+            _, wh, _ = tf.split(raw_split[i], [2, 2, -1], axis=-1)
+            wh = tf.math.exp(wh)
+
+            # Can be Mapped to Edge TPU
+            if self._scale_x_y != 1.0:
+                xy = (xy - 0.5) * self._scale_x_y + 0.5
+            xy *= self._inver_grid_wh
+            xy += self._grid_coord
+
+            wh = wh * self._anchors[i] * self._inver_image_wh
+
+            output.append(
+                tf.reshape(tf.concat([xy, wh, oc], axis=-1), self._return_shape)
+            )
+
+        return tf.concat(output, axis=1)
 
 
 def _split_and_get(groups: int, group_id: int) -> Callable:
