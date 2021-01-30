@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import colorsys
-from typing import Union
+from typing import Dict, Union
 
 # Don't import tensorflow
 import cv2
@@ -110,7 +110,7 @@ def resize_image(
     return padded_image, ground_truth
 
 
-def draw_bboxes(image: np.ndarray, bboxes: np.ndarray, classes: dict):
+def draw_bboxes(image: np.ndarray, bboxes: np.ndarray, names: Dict[int, str]):
     """
     @parma image:  Dim(height, width, channel)
     @param bboxes: (candidates, 4) or (candidates, 5)
@@ -155,7 +155,7 @@ def draw_bboxes(image: np.ndarray, bboxes: np.ndarray, classes: dict):
         cv2.rectangle(image, top_left, bottom_right, bbox_color, 2)
 
         # Draw text box
-        bbox_text = "{}: {:.1%}".format(classes[class_id], bbox[5])
+        bbox_text = "{}: {:.1%}".format(names[class_id], bbox[5])
         t_size = cv2.getTextSize(bbox_text, 0, font_size, font_thickness)[0]
         cv2.rectangle(
             image,

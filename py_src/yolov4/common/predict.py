@@ -161,7 +161,7 @@ def DIoU_NMS(candidates, threshold):
 
 def candidates_to_pred_bboxes(
     candidates,
-    input_size,
+    input_shape,
     iou_threshold: float = 0.3,
     score_threshold: float = 0.25,
 ):
@@ -196,8 +196,8 @@ def candidates_to_pred_bboxes(
     # Remove small candidates
     candidates = candidates[
         np.logical_and(
-            candidates[:, 2] > (4 / input_size[0]),  # width
-            candidates[:, 3] > (4 / input_size[1]),  # height
+            candidates[:, 2] > (4 / input_shape[1]),  # width
+            candidates[:, 3] > (4 / input_shape[0]),  # height
         ),
         :,
     ]
@@ -220,10 +220,10 @@ def candidates_to_pred_bboxes(
     return DIoU_NMS(candidates, iou_threshold)
 
 
-def fit_pred_bboxes_to_original(bboxes, input_size, original_shape):
+def fit_pred_bboxes_to_original(bboxes, input_shape, original_shape):
     """
     @param `bboxes`: Dim(-1, (x, y, w, h, class_id, probability))
-    @param `input_size`: (width, height)
+    @param `input_shape`: (height, width, ...)
     @param `original_shape`: (height, width, channels)
     """
 
@@ -231,7 +231,7 @@ def fit_pred_bboxes_to_original(bboxes, input_size, original_shape):
     bboxes = np.copy(bboxes)
 
     w_h = width / height
-    iw_ih = input_size[0] / input_size[1]
+    iw_ih = input_shape[1] / input_shape[0]
 
     if w_h > iw_ih:
         scale = w_h / iw_ih

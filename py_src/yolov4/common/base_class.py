@@ -47,7 +47,9 @@ class BaseClass:
             image, ground_truth = yolo.resize_image(image, ground_truth)
         """
         return media.resize_image(
-            image, target_size=self.input_size, ground_truth=ground_truth
+            image,
+            target_shape=self.config.input_shape,
+            ground_truth=ground_truth,
         )
 
     def candidates_to_pred_bboxes(
@@ -63,7 +65,7 @@ class BaseClass:
         """
         return predict.candidates_to_pred_bboxes(
             candidates,
-            self.input_size,
+            input_shape=self.config.input_shape,
             iou_threshold=iou_threshold,
             score_threshold=score_threshold,
         )
@@ -73,9 +75,10 @@ class BaseClass:
         @param pred_bboxes:    Dim(-1, (x, y, w, h, class_id, probability))
         @param original_shape: (height, width, channels)
         """
-        # pylint: disable=no-self-use
         return predict.fit_pred_bboxes_to_original(
-            pred_bboxes, self.input_size, original_shape
+            pred_bboxes,
+            input_shape=self.config.input_shape,
+            original_shape=original_shape,
         )
 
     def draw_bboxes(self, image, bboxes):
@@ -90,7 +93,7 @@ class BaseClass:
         Usage:
             image = yolo.draw_bboxes(image, bboxes)
         """
-        return media.draw_bboxes(image, bboxes, self.classes)
+        return media.draw_bboxes(image, bboxes, names=self.config.names)
 
     #############
     # Inference #
