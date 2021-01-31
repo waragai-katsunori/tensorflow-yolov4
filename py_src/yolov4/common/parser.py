@@ -57,7 +57,7 @@ def parse_cfg(
             "filters": "int",
             "size": "int",
             "stride": "int",
-            "pad": "int",
+            "pad": "bool",
             "activation": "str",
         },
         "maxpool": {

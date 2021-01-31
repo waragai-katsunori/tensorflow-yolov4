@@ -48,9 +48,10 @@ class YOLOv4Model(keras.Model):
                         activation=layer_option["activation"],
                         filters=layer_option["filters"],
                         kernel_regularizer=_l2,
-                        kernel_size=layer_option["size"],
                         name=layer_name,
-                        strides=layer_option["stride"],
+                        pad=layer_option["pad"],
+                        size=layer_option["size"],
+                        stride=layer_option["stride"],
                     )
                 )
 

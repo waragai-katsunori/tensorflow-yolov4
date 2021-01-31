@@ -37,21 +37,27 @@ class YOLOConv2D(keras.Sequential):
         activation: str,
         filters: int,
         kernel_regularizer,
-        kernel_size: int,
-        strides: int,
+        pad: bool,
+        size: int,
+        stride: int,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        if strides == 2:
+        if not pad:
+            # (input_width + left_pad + right_pad - size) / stride + 1
+            #       = output_width
+            raise ValueError("YOLOConv2D: 'pad=0' is not supported.")
+
+        if stride == 2:
             self.add(keras.layers.ZeroPadding2D(((1, 0), (1, 0))))
 
         self.add(
             keras.layers.Conv2D(
                 filters=filters,
-                kernel_size=(kernel_size, kernel_size),
-                padding="same" if strides == 1 else "valid",
-                strides=(strides, strides),
+                kernel_size=(size, size),
+                padding="same" if stride == 1 else "valid",
+                strides=(stride, stride),
                 use_bias=activation == "linear",
                 kernel_regularizer=kernel_regularizer,
                 kernel_initializer=tf.random_normal_initializer(stddev=0.01),
