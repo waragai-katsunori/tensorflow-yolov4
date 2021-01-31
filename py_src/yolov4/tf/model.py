@@ -128,9 +128,14 @@ class YOLOv4Model(keras.Model):
                         )
 
             elif layer_option["type"] == "shortcut":
-                indexes: List[int] = layer_option["from"]
-                indexes.append(layer_number - 1)
-                output.append(layer_function([output[i] for i in indexes]))
+                output.append(
+                    layer_function(
+                        [
+                            output[layer_number - 1],
+                            *[output[i] for i in layer_option["from"]],
+                        ]
+                    )
+                )
 
             else:
                 if layer_number == 0:
