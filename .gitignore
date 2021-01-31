@@ -5,6 +5,6 @@ build
 checkpoints
 dist
 log
-test*.py
+test*
 venv
 yolov4.egg-info
