@@ -139,16 +139,18 @@ def parse_cfg(
                     elif layer_meta[layer_type][option] == "bool":
                         value = bool(int(value))
                     elif layer_meta[layer_type][option] == "index_list":
-                        value = [
+                        value = tuple(
                             int(i)
                             if int(i) >= 0
                             else config[layer_name]["count"] + int(i)
                             for i in value.split(",")
-                        ]
+                        )
                     elif layer_meta[layer_type][option] == "int_list":
-                        value = [int(i.strip()) for i in value.split(",")]
+                        value = tuple(int(i.strip()) for i in value.split(","))
                     elif layer_meta[layer_type][option] == "float_list":
-                        value = [float(i.strip()) for i in value.split(",")]
+                        value = tuple(
+                            float(i.strip()) for i in value.split(",")
+                        )
                     elif layer_meta[layer_type][option] == "other":
                         if layer_type == "yolo":
                             if option == "anchors":
@@ -160,7 +162,7 @@ def parse_cfg(
                                     _value.append(
                                         (value[2 * i], value[2 * i + 1])
                                     )
-                                value = _value
+                                value = tuple(_value)
                 except KeyError as error:
                     raise RuntimeError(
                         f"parse_cfg: [{layer_name}] '{option}' is not"
