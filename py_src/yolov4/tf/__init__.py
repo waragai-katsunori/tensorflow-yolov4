@@ -245,18 +245,22 @@ class YOLOv4(BaseClass):
         )
 
     def save_dataset_for_mAP(
-        self, mAP_path, data_set, num_sample=None, images_optional=False
+        self,
+        dataset: YOLODataset,
+        mAP_path: str,
+        images_optional: bool = False,
+        num_sample: int = None,
     ):
         """
         gt: name left top right bottom
         dr: name confidence left top right bottom
 
+        @parma `dataset`
         @param `mAP_path`
-        @parma `data_set`
-        @param `num_sample`: Number of images for mAP. If `None`, all images in
-                `data_set` are used.
         @parma `images_optional`: If `True`, images are copied to the
                 `mAP_path`.
+        @param `num_sample`: Number of images for mAP. If `None`, all images in
+                `data_set` are used.
         """
         input_path = path.join(mAP_path, "input")
 
@@ -269,18 +273,19 @@ class YOLOv4(BaseClass):
         makedirs(gt_dir_path)
         makedirs(dr_dir_path)
 
+        img_dir_path = ""
         if images_optional:
             img_dir_path = path.join(input_path, "images-optional")
             makedirs(img_dir_path)
 
-        max_dataset_size = len(data_set)
+        max_dataset_size = len(dataset)
 
         if num_sample is None:
             num_sample = max_dataset_size
 
         for i in range(num_sample):
             # image_path, [[x, y, w, h, class_id], ...]
-            _dataset = data_set.dataset[i % max_dataset_size].copy()
+            _dataset = dataset._dataset[i % max_dataset_size].copy()
 
             if images_optional:
                 image_path = path.join(img_dir_path, "image_{}.jpg".format(i))
@@ -301,7 +306,9 @@ class YOLOv4(BaseClass):
             ) as fd:
                 for xywhc in _dataset[1]:
                     # name left top right bottom
-                    class_name = self.classes[int(xywhc[4])]
+                    class_name = self.config.names[int(xywhc[4])].replace(
+                        " ", "_"
+                    )
                     left = int(xywhc[0] - xywhc[2] / 2)
                     top = int(xywhc[1] - xywhc[3] / 2)
                     right = int(xywhc[0] + xywhc[2] / 2)
@@ -324,7 +331,9 @@ class YOLOv4(BaseClass):
             ) as fd:
                 for xywhcp in pred_bboxes:
                     # name confidence left top right bottom
-                    class_name = self.classes[int(xywhcp[4])]
+                    class_name = self.config.names[int(xywhcp[4])].replace(
+                        " ", "_"
+                    )
                     probability = xywhcp[5]
                     left = int(xywhcp[0] - xywhcp[2] / 2)
                     top = int(xywhcp[1] - xywhcp[3] / 2)
