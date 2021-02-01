@@ -36,6 +36,9 @@ class YOLOv4Model(keras.Model):
         super().__init__(
             name="YOLOv4Tiny" if self._model_config.tiny else "YOLOv4"
         )
+
+        # Model ################################################################
+
         _l2 = None
 
         self._model_layers = []
@@ -102,6 +105,10 @@ class YOLOv4Model(keras.Model):
                 _l2 = keras.regularizers.L2(
                     l2=self._model_config["net"]["decay"]
                 )
+
+        # Training #############################################################
+
+        self.training_iterations = 0
 
     def call(self, x):
         output = []

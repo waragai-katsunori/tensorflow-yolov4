@@ -334,9 +334,10 @@ class YOLOCallbackAtEachStep(Callback):
     def __init__(self, verbose: int = 0):
         super().__init__()
         self.verbose = verbose
-        self._iterations = 0
 
     def on_train_begin(self, logs=None):
+        self.model.training_iterations = 0
+
         batch_size = self.model._model_config["net"]["batch"]
 
         self._cfg_burn_in = self.model._model_config["net"]["burn_in"]
@@ -354,31 +355,34 @@ class YOLOCallbackAtEachStep(Callback):
         ]
 
     def on_train_batch_begin(self, batch, logs=None):
-        self._iterations += 1
+        self.model.training_iterations += 1
 
         self.update_lr()
 
     def on_train_batch_end(self, batch, logs=None):
+        iterations = self.model.training_iterations
         logs = logs or {}
 
         logs["lr"] = backend.get_value(self.model.optimizer.lr)
 
-        if self._iterations >= self._cfg_max_iterations:
+        if iterations >= self._cfg_max_iterations:
             self.model.stop_training = True
 
     def update_lr(self):
+        iterations = self.model.training_iterations
+
         if not hasattr(self.model.optimizer, "lr"):
             raise ValueError('Optimizer must have a "lr" attribute.')
 
         lr = float(backend.get_value(self.model.optimizer.lr))
 
-        if self._iterations <= self._cfg_burn_in:
+        if iterations <= self._cfg_burn_in:
             lr = self._cfg_learning_rate * backend.pow(
-                self._iterations / self._cfg_burn_in, self._cfg_power
+                iterations / self._cfg_burn_in, self._cfg_power
             )
 
-        elif self._iterations in self._cfg_scale_iterations:
-            index = self._cfg_scale_iterations.index(self._iterations)
+        elif iterations in self._cfg_scale_iterations:
+            index = self._cfg_scale_iterations.index(iterations)
             lr = lr * self._cfg_scales[index]
 
         backend.set_value(self.model.optimizer.lr, backend.get_value(lr))
@@ -389,35 +393,36 @@ class SaveWeightsCallback(Callback):
         self,
         yolo,
         dir_path: str = "trained-weights",
+        step_per_save: int = 1000,
         weights_type: str = "tf",
-        epoch_per_save: int = 1000,
     ):
-        super(SaveWeightsCallback, self).__init__()
-        self.yolo = yolo
-        self.weights_type = weights_type
-        self.epoch_per_save = epoch_per_save
+        super().__init__()
+        self._yolo = yolo
+        self._weights_type = weights_type
+        self._step_per_save = step_per_save
 
         makedirs(dir_path, exist_ok=True)
 
-        if self.yolo.tiny:
-            self.path_prefix = path.join(dir_path, "yolov4-tiny")
-        else:
-            self.path_prefix = path.join(dir_path, "yolov4")
+        self._path_prefix = path.join(dir_path, self._yolo.config.model_name)
 
         if weights_type == "tf":
             self.extension = "-checkpoint"
         else:
             self.extension = ".weights"
 
-    def on_train_end(self, logs=None):
-        self.yolo.save_weights(
-            "{}-final{}".format(self.path_prefix, self.extension),
-            weights_type=self.weights_type,
-        )
+    def on_train_batch_end(self, batch, logs=None):
+        iterations = self.model.training_iterations
 
-    def on_epoch_end(self, epoch, logs=None):
-        if (epoch + 1) % self.epoch_per_save == 0:
-            self.yolo.save_weights(
-                "{}-{}{}".format(self.path_prefix, epoch + 1, self.extension),
-                weights_type=self.weights_type,
+        if iterations % self._step_per_save == 0:
+            self._yolo.save_weights(
+                "{}-{}-step{}".format(
+                    self._path_prefix, iterations, self.extension
+                ),
+                weights_type=self._weights_type,
             )
+
+    def on_train_end(self, logs=None):
+        self._yolo.save_weights(
+            "{}-final{}".format(self._path_prefix, self.extension),
+            weights_type=self._weights_type,
+        )

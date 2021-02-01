@@ -30,6 +30,7 @@ class YOLOConfig:
     def __init__(self):
         self._cfg: Dict[str, Dict[str, Any]] = {}
         self._count: Dict[str, int]
+        self._model_name: str
         self._names: Dict[int, str] = {}
 
         self.output_shape: List[tuple]
@@ -37,7 +38,9 @@ class YOLOConfig:
     # Parse ####################################################################
 
     def parse_cfg(self, cfg_path: str):
-        self._cfg, self._count = parser.parse_cfg(cfg_path=cfg_path)
+        self._cfg, self._count, self._model_name = parser.parse_cfg(
+            cfg_path=cfg_path
+        )
         if len(self._names) != 0:
             if self._cfg["yolo0"]["classes"] != len(self._names):
                 raise RuntimeError(
@@ -71,6 +74,10 @@ class YOLOConfig:
             self["net"]["width"],
             self["net"]["channels"],
         )
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
 
     @property
     def names(self) -> Dict[int, str]:
