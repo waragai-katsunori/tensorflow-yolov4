@@ -28,37 +28,40 @@ from tensorflow.keras import backend
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.losses import BinaryCrossentropy, Loss, Reduction
 
+from ..common.config import YOLOConfig
+
 
 class YOLOv4Loss(Loss):
-    def __init__(self):
-        # TODO
-        pass
+    def __init__(self, config: YOLOConfig, verbose: int = 1):
+        super().__init__(name="YOLOv4Loss")
+
+        self._bbox_xiou = {
+            "iou": bbox_iou,
+            "ciou": bbox_ciou,
+            "giou": bbox_giou,
+        }
+
+        self._loss_config = config
+
+        self._prob_binaryCrossentropy = BinaryCrossentropy(
+            reduction=Reduction.NONE
+        )
+
+        self._verbose = verbose
 
     def call(self, y_true, y_pred):
         """
-        @param `y_true`: Dim(batch, g_height, g_width, 3,
+        @param `y_true`: Dim(batch, g_height * g_width * 3,
                                 (b_x, b_y, b_w, b_h, conf, prob_0, prob_1, ...))
-        @param `y_pred`: Dim(batch, g_height, g_width, 3,
+        @param `y_pred`: Dim(batch, g_height * g_width * 3,
                                 (b_x, b_y, b_w, b_h, conf, prob_0, prob_1, ...))
         """
-        if len(y_pred.shape) == 4:
-            _, g_height, g_width, box_size = y_pred.shape
-            box_size = box_size // 3
-        else:
-            _, g_height, g_width, _, box_size = y_pred.shape
-
-        y_true = tf.reshape(
-            y_true, shape=(-1, g_height * g_width * 3, box_size)
-        )
-        y_pred = tf.reshape(
-            y_pred, shape=(-1, g_height * g_width * 3, box_size)
-        )
+        yolo_name = y_pred.name.split("/")[1]
+        _, candidate_size, _ = y_pred.shape
 
         truth_xywh = y_true[..., 0:4]
         truth_conf = y_true[..., 4:5]
         truth_prob = y_true[..., 5:]
-
-        num_classes = truth_prob.shape[-1]
 
         pred_xywh = y_pred[..., 0:4]
         pred_conf = y_pred[..., 4:5]
@@ -70,22 +73,23 @@ class YOLOv4Loss(Loss):
         # Dim(batch, g_height * g_width * 3, 1)
         one_obj_mask = one_obj > 0.5
 
-        zero = tf.zeros((1, g_height * g_width * 3, 1), dtype=tf.float32)
-
         # IoU Loss
-        xiou = self.bbox_xiou(truth_xywh, pred_xywh)
+        xiou = self._bbox_xiou[self._loss_config[yolo_name]["iou_loss"]](
+            truth_xywh, pred_xywh
+        )
         xiou_scale = 2.0 - truth_xywh[..., 2:3] * truth_xywh[..., 3:4]
         xiou_loss = one_obj * xiou_scale * (1.0 - xiou[..., tf.newaxis])
         xiou_loss = 3 * tf.reduce_mean(tf.reduce_sum(xiou_loss, axis=(1, 2)))
 
         # Confidence Loss
         i0 = tf.constant(0)
+        zero = tf.zeros((1, candidate_size, 1), dtype=tf.float32)
 
         def body(i, max_iou):
             object_mask = tf.reshape(one_obj_mask[i, ...], shape=(-1,))
             truth_bbox = tf.boolean_mask(truth_xywh[i, ...], mask=object_mask)
             # g_height * g_width * 3,      1, xywh
-            #               1, answer, xywh
+            #                      1, answer, xywh
             #   => g_height * g_width * 3, answer
             _max_iou0 = tf.cond(
                 tf.equal(num_obj[i], 0),
@@ -110,12 +114,12 @@ class YOLOv4Loss(Loss):
             return tf.add(i, 1), _max_iou1
 
         _, max_iou = tf.while_loop(
-            self.while_cond,
-            body,
-            [i0, zero],
+            cond=lambda i, iou: tf.less(i, self._loss_config["net"]["batch"]),
+            body=body,
+            loop_vars=[i0, zero],
             shape_invariants=[
                 i0.get_shape(),
-                tf.TensorShape([None, g_height * g_width * 3, 1]),
+                tf.TensorShape([None, candidate_size, 1]),
             ],
         )
 
@@ -130,20 +134,18 @@ class YOLOv4Loss(Loss):
         )
 
         # Probabilities Loss
-        prob_loss = self.prob_binaryCrossentropy(truth_prob, pred_prob)
+        prob_loss = self._prob_binaryCrossentropy(truth_prob, pred_prob)
         prob_loss = one_obj * prob_loss[..., tf.newaxis]
         prob_loss = tf.reduce_mean(
-            tf.reduce_sum(prob_loss, axis=(1, 2)) * num_classes
+            tf.reduce_sum(prob_loss, axis=(1, 2))
+            * self._loss_config[yolo_name]["classes"]
         )
 
         total_loss = xiou_loss + conf_loss + prob_loss
 
-        if self.verbose != 0:
-            # tf.print(
-            #     f"grid: {g_height}*{g_width}, iou_loss: {xiou_loss:7.3f}, conf_loss: {conf_loss:7.3f}, prob_loss: {prob_loss:7.3f}, total_loss: {total_loss:7.3f}"
-            # )
+        if self._verbose != 0:
             tf.print(
-                f"grid: {g_height}*{g_width}",
+                f"{yolo_name}:",
                 "iou_loss:",
                 xiou_loss,
                 "conf_loss:",
