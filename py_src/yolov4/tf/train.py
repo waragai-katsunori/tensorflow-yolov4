@@ -338,21 +338,16 @@ class YOLOCallbackAtEachStep(Callback):
     def on_train_begin(self, logs=None):
         self.model.training_iterations = 0
 
-        batch_size = self.model._model_config["net"]["batch"]
-
         self._cfg_burn_in = self.model._model_config["net"]["burn_in"]
         self._cfg_learning_rate = self.model._model_config["net"][
             "learning_rate"
         ]
-        self._cfg_max_iterations = (
-            self.model._model_config["net"]["max_batches"] // batch_size + 1
-        )
+        self._cfg_max_iterations = self.model._model_config["net"][
+            "max_batches"
+        ]
         self._cfg_power = self.model._model_config["net"]["power"]
         self._cfg_scales = self.model._model_config["net"]["scales"]
-        self._cfg_scale_iterations = [
-            batch // batch_size
-            for batch in self.model._model_config["net"]["steps"]
-        ]
+        self._cfg_scale_iterations = self.model._model_config["net"]["steps"]
 
     def on_train_batch_begin(self, batch, logs=None):
         self.model.training_iterations += 1
