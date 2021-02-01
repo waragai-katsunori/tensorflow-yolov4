@@ -51,8 +51,6 @@ class YOLODataset(keras.utils.Sequence):
             dataset_type=dataset_type,
             image_path_prefix=image_path_prefix,
         )
-        np.random.shuffle(self._dataset)
-
         # Etc ##################################################################
 
         self._num_yolo = config.count["yolo"]
@@ -275,9 +273,6 @@ class YOLODataset(keras.utils.Sequence):
                 self._convert_bboxes_to_ground_truth(bboxes)
             ):
                 batch_y[j].append(gt)
-
-        if index == len(self) - 1:
-            np.random.shuffle(self._dataset)
 
         return np.concatenate(batch_x, axis=0), [
             np.concatenate(y, axis=0) for y in batch_y
