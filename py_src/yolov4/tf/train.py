@@ -325,6 +325,65 @@ def bbox_ciou(bboxes1, bboxes2):
     return ciou
 
 
+class YOLOCallbackAtEachStep(Callback):
+    """
+    Ref
+        - tf.keras.callbacks.LearningRateScheduler
+    """
+
+    def __init__(self, verbose: int = 0):
+        super().__init__()
+        self.verbose = verbose
+        self._iterations = 0
+
+    def on_train_begin(self, logs=None):
+        batch_size = self.model._model_config["net"]["batch"]
+
+        self._cfg_burn_in = self.model._model_config["net"]["burn_in"]
+        self._cfg_learning_rate = self.model._model_config["net"][
+            "learning_rate"
+        ]
+        self._cfg_max_iterations = (
+            self.model._model_config["net"]["max_batches"] // batch_size + 1
+        )
+        self._cfg_power = self.model._model_config["net"]["power"]
+        self._cfg_scales = self.model._model_config["net"]["scales"]
+        self._cfg_scale_iterations = [
+            batch // batch_size
+            for batch in self.model._model_config["net"]["steps"]
+        ]
+
+    def on_train_batch_begin(self, batch, logs=None):
+        self._iterations += 1
+
+        self.update_lr()
+
+    def on_train_batch_end(self, batch, logs=None):
+        logs = logs or {}
+
+        logs["lr"] = backend.get_value(self.model.optimizer.lr)
+
+        if self._iterations >= self._cfg_max_iterations:
+            self.model.stop_training = True
+
+    def update_lr(self):
+        if not hasattr(self.model.optimizer, "lr"):
+            raise ValueError('Optimizer must have a "lr" attribute.')
+
+        lr = float(backend.get_value(self.model.optimizer.lr))
+
+        if self._iterations <= self._cfg_burn_in:
+            lr = self._cfg_learning_rate * backend.pow(
+                self._iterations / self._cfg_burn_in, self._cfg_power
+            )
+
+        elif self._iterations in self._cfg_scale_iterations:
+            index = self._cfg_scale_iterations.index(self._iterations)
+            lr = lr * self._cfg_scales[index]
+
+        backend.set_value(self.model.optimizer.lr, backend.get_value(lr))
+
+
 class SaveWeightsCallback(Callback):
     def __init__(
         self,
