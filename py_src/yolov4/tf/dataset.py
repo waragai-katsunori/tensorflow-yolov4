@@ -62,7 +62,7 @@ class YOLODataset(keras.utils.Sequence):
             for mask in config[name]["mask"]:
                 aw, ah = config[f"yolo{i}"]["anchors"][mask]
                 self._anchors[i].append(
-                    (aw / config["net"]["width"], ah / config["net"]["width"])
+                    (aw / config["net"]["width"], ah / config["net"]["height"])
                 )
 
         # Data augmentation ####################################################
@@ -111,8 +111,8 @@ class YOLODataset(keras.utils.Sequence):
                 np.reshape(
                     np.stack(
                         np.meshgrid(
-                            (np.arange(grid_shape[1]) + 0.5) / grid_shape[1],
                             (np.arange(grid_shape[2]) + 0.5) / grid_shape[2],
+                            (np.arange(grid_shape[1]) + 0.5) / grid_shape[1],
                         ),
                         axis=-1,
                     ),
@@ -165,8 +165,8 @@ class YOLODataset(keras.utils.Sequence):
 
                 if np.any(iou_mask):
                     xy_index = xywh[0:2] * (
-                        self._grid_shapes[i][1],  # width
-                        self._grid_shapes[i][0],  # height
+                        self._grid_shapes[i][2],  # width
+                        self._grid_shapes[i][1],  # height
                     )
 
                     exist_positive = True
@@ -183,8 +183,8 @@ class YOLODataset(keras.utils.Sequence):
                 j = index % 3
 
                 xy_index = xywh[0:2] * (
-                    self._grid_shapes[i][1],  # width
-                    self._grid_shapes[i][0],  # height
+                    self._grid_shapes[i][2],  # width
+                    self._grid_shapes[i][1],  # height
                 )
 
                 _x, _y = int(xy_index[0]), int(xy_index[1])
@@ -192,7 +192,16 @@ class YOLODataset(keras.utils.Sequence):
                 ground_truth[i][0, _y, _x, j, 4:5] = 1.0
                 ground_truth[i][0, _y, _x, j, 5:] = onehot
 
-        return [np.reshape(gt, (1, -1, gt.shape[-1])) for gt in ground_truth]
+        return [
+            np.concatenate(
+                [
+                    np.reshape(gt[..., i, :], (1, -1, gt.shape[-1]))
+                    for i in range(3)
+                ],
+                axis=1,
+            )
+            for gt in ground_truth
+        ]
 
     def _convert_dataset_to_image_and_bboxes(self, dataset):
         """
