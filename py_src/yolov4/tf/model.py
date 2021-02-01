@@ -33,9 +33,7 @@ from ..common.config import YOLOConfig
 class YOLOv4Model(keras.Model):
     def __init__(self, config: YOLOConfig):
         self._model_config: YOLOConfig = config
-        super().__init__(
-            name="YOLOv4Tiny" if self._model_config.tiny else "YOLOv4"
-        )
+        super().__init__(name=config.model_name)
 
         # Model ################################################################
 

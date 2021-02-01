@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from os import path
+import pathlib
 import random
 from typing import Any, Dict, Tuple
 
@@ -30,7 +31,7 @@ import numpy as np
 
 def parse_cfg(
     cfg_path: str,
-) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, int]]:
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, int], str]:
     layer_meta = {
         "net": {
             "batch": "int",
@@ -49,6 +50,7 @@ def parse_cfg(
             "burn_in": "int",
             "max_batches": "int",
             "policy": "str",
+            "power": "int",
             "steps": "int_list",
             "scales": "float_list",
         },
@@ -123,6 +125,9 @@ def parse_cfg(
                     layer_count += 1
                     layer_name = layer_type + str(count[layer_type])
                 config[layer_name] = {"count": layer_count, "type": layer_type}
+                if layer_type == "net":
+                    config[layer_name].setdefault("mosaic", False)
+                    config[layer_name].setdefault("power", 4)
             else:
                 # layer option
                 option, value = line.split("=")
@@ -173,7 +178,9 @@ def parse_cfg(
 
     count[layer_type] += 1
 
-    return config, count
+    model_name = pathlib.Path(cfg_path).stem
+
+    return config, count, model_name
 
 
 def parse_names(names_path: str) -> Dict[int, str]:
