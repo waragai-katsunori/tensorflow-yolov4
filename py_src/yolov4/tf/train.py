@@ -375,10 +375,18 @@ class YOLOCallbackAtEachStep(Callback):
             lr = self._cfg_learning_rate * backend.pow(
                 iterations / self._cfg_burn_in, self._cfg_power
             )
+            tf.summary.scalar(name="learning_rate", data=lr, step=iterations)
 
         elif iterations in self._cfg_scale_iterations:
+            tf.summary.scalar(
+                name="learning_rate", data=lr, step=iterations - 1
+            )
             index = self._cfg_scale_iterations.index(iterations)
             lr = lr * self._cfg_scales[index]
+            tf.summary.scalar(name="learning_rate", data=lr, step=iterations)
+
+        elif iterations % 1000:
+            tf.summary.scalar(name="learning_rate", data=lr, step=iterations)
 
         backend.set_value(self.model.optimizer.lr, backend.get_value(lr))
 
