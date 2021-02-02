@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import platform
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -44,27 +45,44 @@ EDGETPU_SHARED_LIB = {
 
 class YOLOv4(BaseClass):
     def __init__(self, tpu: bool = False):
-        # TODO
-        pass
+        super().__init__()
+        self._input_details: Dict[str, Any]
+        self._interpreter: tflite.Interpreter
+        self._output_details: List[Dict[str, Any]]
+        self._tpu = tpu
+
+    @property
+    def tpu(self) -> bool:
+        return self._tpu
 
     def load_tflite(
         self, tflite_path: str, edgetpu_lib: str = EDGETPU_SHARED_LIB
     ) -> None:
         if self.tpu:
-            self.interpreter = tflite.Interpreter(
+            self._interpreter = tflite.Interpreter(
                 model_path=tflite_path,
                 experimental_delegates=[load_delegate(edgetpu_lib)],
             )
         else:
-            self.interpreter = tflite.Interpreter(model_path=tflite_path)
+            self._interpreter = tflite.Interpreter(model_path=tflite_path)
+        self._interpreter.allocate_tensors()
 
-        self.interpreter.allocate_tensors()
-        input_details = self.interpreter.get_input_details()[0]
-        # width, height
-        self.input_size = (input_details["shape"][2], input_details["shape"][1])
-        self.input_index = input_details["index"]
-        output_details = self.interpreter.get_output_details()
-        self.output_index = [details["index"] for details in output_details]
+        input_details = self._interpreter.get_input_details()[0]
+        if (
+            input_details["shape"][1] != self.config.input_shape[0]
+            or input_details["shape"][2] != self.config.input_shape[1]
+            or input_details["shape"][3] != self.config.input_shape[2]
+        ):
+            raise RuntimeError(
+                "YOLOv4: config.input_shape and tflite.input_details['shape']"
+                " do not match."
+            )
+        self._input_details = input_details
+
+        self._output_details = self._interpreter.get_output_details()
+        self.output_shape = tuple(
+            output_detail["shape"] for output_detail in self._output_details
+        )
 
     #############
     # Inference #
@@ -83,35 +101,27 @@ class YOLOv4(BaseClass):
 
         @return pred_bboxes == Dim(-1, (x, y, w, h, class_id, probability))
         """
-        # image_data == Dim(1, input_size[1], input_size[0], channels)
         image_data = self.resize_image(frame)
-        if not self.tpu:
+        if self._input_details["dtype"] is np.float32:
             image_data = image_data.astype(np.float32) / 255.0
         image_data = image_data[np.newaxis, ...]
 
-        # s_pred, m_pred, l_pred
-        # x_pred == Dim(1, g_height, g_width, anchors, (bbox))
-        self.interpreter.set_tensor(self.input_index, image_data)
-        self.interpreter.invoke()
-        if not self.tpu:
-            candidates = [
-                self.interpreter.get_tensor(index)
-                for index in self.output_index
-            ]
-        else:
-            candidates = [
-                self.interpreter.get_tensor(index).astype(np.float32) / 255.0
-                for index in self.output_index
-            ]
-        _candidates = []
-        for candidate in candidates:
-            grid_size = candidate.shape[1:3]
-            _candidates.append(
-                np.reshape(
-                    candidate[0], (1, grid_size[0] * grid_size[1] * 3, -1)
+        self._interpreter.set_tensor(self._input_details["index"], image_data)
+        self._interpreter.invoke()
+
+        candidates = [
+            self._interpreter.get_tensor(output_detail["index"])
+            if output_detail["dtype"] is np.float32
+            else (
+                self._interpreter.get_tensor(output_detail["index"]).astype(
+                    np.float32
                 )
+                / 255.0
             )
-        candidates = np.concatenate(_candidates, axis=1)
+            for output_detail in self._output_details
+        ]
+
+        candidates = np.concatenate(candidates, axis=1)
 
         pred_bboxes = self.candidates_to_pred_bboxes(
             candidates[0],
