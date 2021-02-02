@@ -331,23 +331,17 @@ class YOLOCallbackAtEachStep(Callback):
         - tf.keras.callbacks.LearningRateScheduler
     """
 
-    def __init__(self, verbose: int = 0):
+    def __init__(self, config: YOLOConfig):
         super().__init__()
-        self.verbose = verbose
+        self._cfg_burn_in = config["net"]["burn_in"]
+        self._cfg_learning_rate = config["net"]["learning_rate"]
+        self._cfg_max_iterations = config["net"]["max_batches"]
+        self._cfg_power = config["net"]["power"]
+        self._cfg_scales = config["net"]["scales"]
+        self._cfg_scale_iterations = config["net"]["steps"]
 
     def on_train_begin(self, logs=None):
         self.model.training_iterations = 0
-
-        self._cfg_burn_in = self.model._model_config["net"]["burn_in"]
-        self._cfg_learning_rate = self.model._model_config["net"][
-            "learning_rate"
-        ]
-        self._cfg_max_iterations = self.model._model_config["net"][
-            "max_batches"
-        ]
-        self._cfg_power = self.model._model_config["net"]["power"]
-        self._cfg_scales = self.model._model_config["net"]["scales"]
-        self._cfg_scale_iterations = self.model._model_config["net"]["steps"]
 
     def on_train_batch_begin(self, batch, logs=None):
         self._batch_begin = batch
