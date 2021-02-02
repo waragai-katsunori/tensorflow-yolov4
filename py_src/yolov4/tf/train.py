@@ -56,7 +56,7 @@ class YOLOv4Loss(Loss):
         @param `y_pred`: Dim(batch, g_height * g_width * 3,
                                 (b_x, b_y, b_w, b_h, conf, prob_0, prob_1, ...))
         """
-        yolo_name = y_pred.name.split("/")[1]
+        yolo_name = y_pred.name.split("/")[-2]
         _, candidate_size, _ = y_pred.shape
 
         truth_xywh = y_true[..., 0:4]
@@ -350,11 +350,14 @@ class YOLOCallbackAtEachStep(Callback):
         self._cfg_scale_iterations = self.model._model_config["net"]["steps"]
 
     def on_train_batch_begin(self, batch, logs=None):
-        self.model.training_iterations += 1
+        self._batch_begin = batch
 
         self.update_lr()
 
     def on_train_batch_end(self, batch, logs=None):
+        # compile: steps_per_execution
+        # next begin iteration number
+        self.model.training_iterations += batch - self._batch_begin + 1
         iterations = self.model.training_iterations
         logs = logs or {}
 
@@ -364,28 +367,33 @@ class YOLOCallbackAtEachStep(Callback):
             self.model.stop_training = True
 
     def update_lr(self):
+        # on_train_batch_begin
         iterations = self.model.training_iterations
 
         if not hasattr(self.model.optimizer, "lr"):
             raise ValueError('Optimizer must have a "lr" attribute.')
 
-        lr = float(backend.get_value(self.model.optimizer.lr))
+        lr = self._cfg_learning_rate
 
-        if iterations <= self._cfg_burn_in:
-            lr = self._cfg_learning_rate * backend.pow(
-                iterations / self._cfg_burn_in, self._cfg_power
+        # burn_in=1000
+        # 0, 1, 2, ..., 999
+        if iterations < self._cfg_burn_in:
+            lr *= backend.pow(
+                (iterations + 1) / self._cfg_burn_in, self._cfg_power
             )
-            tf.summary.scalar(name="learning_rate", data=lr, step=iterations)
 
-        elif iterations in self._cfg_scale_iterations:
-            tf.summary.scalar(
-                name="learning_rate", data=lr, step=iterations - 1
-            )
-            index = self._cfg_scale_iterations.index(iterations)
-            lr = lr * self._cfg_scales[index]
-            tf.summary.scalar(name="learning_rate", data=lr, step=iterations)
+        else:
+            # scales=1600,1800
+            # max_batches=2000
+            for index, it in enumerate(
+                [*self._cfg_scale_iterations, self._cfg_max_iterations]
+            ):
+                if iterations < it:
+                    for j in range(index):
+                        lr *= self._cfg_scales[j]
+                    break
 
-        elif iterations % 1000:
+        if lr != float(backend.get_value(self.model.optimizer.lr)):
             tf.summary.scalar(name="learning_rate", data=lr, step=iterations)
 
         backend.set_value(self.model.optimizer.lr, backend.get_value(lr))
