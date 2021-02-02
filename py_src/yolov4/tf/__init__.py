@@ -29,9 +29,10 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from . import train, weights
+from . import weights
 from .dataset import YOLODataset
-from .model import YOLOv4Model
+from .model import YOLOv3Head, YOLOv4Model
+from .train import YOLOCallbackAtEachStep, YOLOv4Loss
 from ..common.base_class import BaseClass
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
@@ -51,6 +52,12 @@ class YOLOv4(BaseClass):
         self._model = YOLOv4Model(self.config)
         self._model(_input)
         self.config.output_shape = self._model.output_shape
+
+        if not self.config.with_head:
+            self._head = tuple(
+                YOLOv3Head(config=self.config, name=f"yolo{i}")
+                for i in range(self.config.count["yolo"])
+            )
 
     def load_weights(self, weights_path: str, weights_type: str = "tf"):
         """
@@ -128,7 +135,7 @@ class YOLOv4(BaseClass):
             converter.representative_dataset = representative_dataset_gen
             _supported_ops += [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
             converter.inference_input_type = tf.uint8
-            converter.inference_output_type = tf.uint8
+            converter.inference_output_type = tf.float32
         else:
             raise ValueError(
                 f"YOLOv4: '{quantization}' is not a valid quantization"
@@ -149,7 +156,13 @@ class YOLOv4(BaseClass):
         candidates = self._model(x, training=False)
         # [yolo0, yolo1, ...]
         # yolo == Dim(1, output_size * output_size * anchors, (bbox))
-        return tf.concat(candidates, axis=1)
+        if self.config.with_head:
+            return tf.concat(candidates, axis=1)
+
+        return tf.concat(
+            [head(candidates[i]) for i, head in enumerate(self._head)],
+            axis=1,
+        )
 
     def predict(
         self,
@@ -201,46 +214,44 @@ class YOLOv4(BaseClass):
 
     def compile(
         self,
-        loss_iou_type: str = "ciou",
-        loss_verbose=1,
-        optimizer=keras.optimizers.Adam(learning_rate=1e-4),
+        loss_verbose: int = 1,
+        optimizer=None,
         **kwargs,
     ):
         # TODO: steps_per_execution tensorflow2.4.0-rc4
-        self.model.compile(
+
+        if optimizer is None:
+            optimizer = keras.optimizers.Adam(
+                learning_rate=self.config["net"]["learning_rate"]
+            )
+
+        self._model.compile(
             optimizer=optimizer,
-            loss=train.YOLOv4Loss(
-                batch_size=self.batch_size,
-                iou_type=loss_iou_type,
-                verbose=loss_verbose,
-            ),
+            loss=YOLOv4Loss(config=self.config, verbose=loss_verbose),
             **kwargs,
         )
 
     def fit(
         self,
-        data_set,
-        epochs,
-        verbose=2,
+        dataset,
         callbacks=None,
         validation_data=None,
-        initial_epoch=0,
-        steps_per_epoch=None,
         validation_steps=None,
-        validation_freq=1,
+        verbose: int = 2,
         **kwargs,
     ):
-        self.model.fit(
-            data_set,
-            batch_size=self.batch_size,
+        callbacks = callbacks or []
+        callbacks.append(YOLOCallbackAtEachStep(config=self.config))
+
+        epochs = self.config["net"]["max_batches"] // len(dataset) + 1
+
+        return self._model.fit(
+            dataset,
             epochs=epochs,
             verbose=verbose,
             callbacks=callbacks,
             validation_data=validation_data,
-            initial_epoch=initial_epoch,
-            steps_per_epoch=steps_per_epoch,
             validation_steps=validation_steps,
-            validation_freq=validation_freq,
             **kwargs,
         )
 
