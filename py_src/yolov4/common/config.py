@@ -33,7 +33,8 @@ class YOLOConfig:
         self._model_name: str
         self._names: Dict[int, str] = {}
 
-        self.output_shape: List[tuple]
+        self.output_shape: Tuple[tuple]
+        self.with_head: bool
 
     # Parse ####################################################################
 

@@ -42,7 +42,7 @@ class YOLOv4Model(keras.Model):
         self._model_layers = []
         layer_name: str
         layer_option: Dict[str, Any]
-        for layer_name, layer_option in self._model_config.items():
+        for layer_name, layer_option in config.items():
             if layer_option["type"] == "convolutional":
                 self._model_layers.append(
                     YOLOConv2D(
@@ -59,13 +59,18 @@ class YOLOv4Model(keras.Model):
             elif layer_option["type"] == "route":
                 if "groups" in layer_option:
                     self._model_layers.append(
-                        _split_and_get(
-                            layer_option["groups"], layer_option["group_id"]
+                        keras.layers.Lambda(
+                            _split_and_get(
+                                layer_option["groups"], layer_option["group_id"]
+                            ),
+                            name=layer_name,
                         )
                     )
                 else:
                     if len(layer_option["layers"]) == 1:
-                        self._model_layers.append(lambda x: x)
+                        self._model_layers.append(
+                            keras.layers.Lambda(lambda x: x, name=layer_name)
+                        )
                     else:
                         self._model_layers.append(
                             keras.layers.Concatenate(axis=-1, name=layer_name)
@@ -95,14 +100,17 @@ class YOLOv4Model(keras.Model):
                 )
 
             elif layer_option["type"] == "yolo":
-                self._model_layers.append(
-                    YOLOv3Head(config=self._model_config, name=layer_name)
-                )
+                if config.with_head:
+                    self._model_layers.append(
+                        YOLOv3Head(config=config, name=layer_name)
+                    )
+                else:
+                    self._model_layers.append(
+                        keras.layers.Lambda(lambda x: x, name=layer_name)
+                    )
 
             elif layer_option["type"] == "net":
-                _l2 = keras.regularizers.L2(
-                    l2=self._model_config["net"]["decay"]
-                )
+                _l2 = keras.regularizers.L2(l2=config["net"]["decay"])
 
         # Training #############################################################
 

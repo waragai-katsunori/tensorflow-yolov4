@@ -35,6 +35,7 @@ except ModuleNotFoundError:
     load_delegate = tflite.experimental.load_delegate
 
 from ..common.base_class import BaseClass
+from ..common.config import YOLOConfig
 
 EDGETPU_SHARED_LIB = {
     "Linux": "libedgetpu.so.1",
@@ -80,13 +81,45 @@ class YOLOv4(BaseClass):
         self._input_details = input_details
 
         self._output_details = self._interpreter.get_output_details()
-        self.output_shape = tuple(
+        self.config.output_shape = tuple(
             output_detail["shape"] for output_detail in self._output_details
         )
+
+        if not self.config.with_head:
+            self._head = tuple(
+                YOLOv3Head(
+                    config=self.config, name=f"yolo{i}", grid_shape=grid_shape
+                )
+                for i, grid_shape in enumerate(self.config.output_shape)
+            )
 
     #############
     # Inference #
     #############
+
+    def _predict(self, x):
+        self._interpreter.set_tensor(self._input_details["index"], x)
+        self._interpreter.invoke()
+
+        candidates = [
+            self._interpreter.get_tensor(output_detail["index"])
+            if output_detail["dtype"] is np.float32
+            else (
+                self._interpreter.get_tensor(output_detail["index"]).astype(
+                    np.float32
+                )
+                / 255.0
+            )
+            for output_detail in self._output_details
+        ]
+
+        if self.config.with_head:
+            return np.concatenate(candidates, axis=1)
+
+        return np.concatenate(
+            [head(candidates[i]) for i, head in enumerate(self._head)],
+            axis=1,
+        )
 
     def predict(
         self,
@@ -106,22 +139,7 @@ class YOLOv4(BaseClass):
             image_data = image_data.astype(np.float32) / 255.0
         image_data = image_data[np.newaxis, ...]
 
-        self._interpreter.set_tensor(self._input_details["index"], image_data)
-        self._interpreter.invoke()
-
-        candidates = [
-            self._interpreter.get_tensor(output_detail["index"])
-            if output_detail["dtype"] is np.float32
-            else (
-                self._interpreter.get_tensor(output_detail["index"]).astype(
-                    np.float32
-                )
-                / 255.0
-            )
-            for output_detail in self._output_details
-        ]
-
-        candidates = np.concatenate(candidates, axis=1)
+        candidates = self._predict(image_data)
 
         pred_bboxes = self.candidates_to_pred_bboxes(
             candidates[0],
@@ -130,3 +148,66 @@ class YOLOv4(BaseClass):
         )
         pred_bboxes = self.fit_pred_bboxes_to_original(pred_bboxes, frame.shape)
         return pred_bboxes
+
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
+class YOLOv3Head:
+    def __init__(self, config: YOLOConfig, name: str, grid_shape):
+        self._anchors = tuple(
+            config[name]["anchors"][mask] for mask in config[name]["mask"]
+        )
+
+        _, grid_height, grid_width, filters = grid_shape
+
+        grid_coord = []
+        for y in range(grid_height):
+            grid_coord.append([])
+            for x in range(grid_width):
+                grid_coord[y].append((x / grid_width, y / grid_height))
+            grid_coord[y] = tuple(grid_coord[y])
+
+        self._grid_coord = tuple(grid_coord)
+
+        self._inver_grid_wh = (1 / grid_width, 1 / grid_height)
+
+        self._inver_image_wh = (
+            1 / config["net"]["width"],
+            1 / config["net"]["height"],
+        )
+
+        self._return_shape = (-1, grid_height * grid_width, filters // 3)
+
+        self._scale_x_y = config[name]["scale_x_y"]
+
+    def __call__(self, x):
+        raw_split = np.split(x, 3, axis=-1)
+
+        sig = sigmoid(x)
+        sig_split = np.split(sig, 3, axis=-1)
+
+        output = []
+        for i in range(3):
+
+            # Operation not supported on Edge TPU
+            xy, _, oc = np.split(sig_split[i], [2, 4], axis=-1)
+            _, wh, _ = np.split(raw_split[i], [2, 4], axis=-1)
+            wh = np.exp(wh)
+
+            # Can be Mapped to Edge TPU
+            if self._scale_x_y != 1.0:
+                xy = (xy - 0.5) * self._scale_x_y + 0.5
+            xy *= self._inver_grid_wh
+            xy += self._grid_coord
+
+            wh = wh * self._anchors[i] * self._inver_image_wh
+
+            output.append(
+                np.reshape(
+                    np.concatenate([xy, wh, oc], axis=-1), self._return_shape
+                )
+            )
+
+        return np.concatenate(output, axis=1)
