@@ -48,6 +48,7 @@ class YOLOv4Model(keras.Model):
                 self._model_layers.append(
                     YOLOConv2D(
                         activation=metalayer.activation,
+                        batch_normalize=metalayer.batch_normalize,
                         filters=metalayer.filters,
                         kernel_regularizer=_l2,
                         name=metalayer.name,

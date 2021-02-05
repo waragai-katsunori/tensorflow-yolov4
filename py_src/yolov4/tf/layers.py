@@ -35,6 +35,7 @@ class YOLOConv2D(keras.Sequential):
     def __init__(
         self,
         activation: str,
+        batch_normalize: int,
         filters: int,
         kernel_regularizer,
         padding: int,
@@ -52,23 +53,23 @@ class YOLOConv2D(keras.Sequential):
                 kernel_size=(size, size),
                 padding="same" if stride == 1 else "valid",
                 strides=(stride, stride),
-                use_bias=activation == "linear",
+                use_bias=not batch_normalize,
                 kernel_regularizer=kernel_regularizer,
                 kernel_initializer=tf.random_normal_initializer(stddev=0.01),
                 bias_initializer=tf.constant_initializer(0.0),
             )
         )
 
-        if activation != "linear":
+        if batch_normalize:
             self.add(keras.layers.BatchNormalization())
 
-            if activation == "mish":
-                self.add(Mish())
-            elif activation == "leaky":
-                self.add(keras.layers.LeakyReLU(alpha=0.1))
-            elif activation == "relu":
-                self.add(keras.layers.ReLU())
-            else:
-                raise ValueError(
-                    f"YOLOConv2D: '{activation}' is not supported."
-                )
+        if activation == "mish":
+            self.add(Mish())
+        elif activation == "leaky":
+            self.add(keras.layers.LeakyReLU(alpha=0.1))
+        elif activation == "relu":
+            self.add(keras.layers.ReLU())
+        elif activation == "linear":
+            pass
+        else:
+            raise ValueError(f"YOLOConv2D: '{activation}' is not supported.")
