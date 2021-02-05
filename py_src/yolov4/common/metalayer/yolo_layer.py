@@ -47,6 +47,10 @@ class YoloLayer(BaseLayer):
         return self._anchors
 
     @property
+    def bflops(self) -> float:
+        return 0
+
+    @property
     def classes(self) -> int:
         return self._classes
 
@@ -94,11 +98,16 @@ class YoloLayer(BaseLayer):
         return self._num
 
     def __repr__(self) -> str:
-        return (
-            f"{self._index_:4} yolo iou_loss: {self._iou_loss}, iou_norm: "
-            f"{self._iou_normalizer}, obj_norm: {self._obj_normalizer}, "
-            f"cls_norm: {self._cls_normalizer}, scale_x_y {self._scale_x_y}"
-        )
+        rep = f"{self.index:4}  "
+        rep += f"{self.type_name}__"
+        rep += f"{self.type_index:<3}  "
+        rep += f"iou_loss: {self._iou_loss}, "
+        rep += f"iou_norm: {self._iou_normalizer}, "
+        rep += f"obj_norm: {self._obj_normalizer}, "
+        rep += f"cls_norm: {self._cls_normalizer}, "
+        rep += "\n                 "
+        rep += f"scale_x_y: {self._scale_x_y}"
+        return rep
 
     def __setitem__(self, key: str, value: Any):
         if key in (

@@ -39,20 +39,31 @@ class ShortcutLayer(BaseLayer):
         return self._activation
 
     @property
+    def bflops(self) -> float:
+        return (
+            self.output_shape[0]
+            * self.output_shape[1]
+            * self.output_shape[2]
+            * len(self._from)
+        ) / 1e9
+
+    @property
     def layers(self) -> tuple:
         # 'from' is python keyword.
         return tuple([*self._from, self._index_ - 1])
 
     def __repr__(self) -> str:
-        rep = f"{self._index_:4} shortcut "
+        rep = f"{self.index:4}  "
+        rep += f"{self.type_name[:5]}_"
+        rep += f"{self.type_index:<3}   "
         for layer in self.layers:
             rep += f"{layer:3},"
-        rep += "    " * (5 - len(self.layers))
-        rep += "                   "
-        rep += (
-            f"-> {self._output_shape[0]:4} x{self._output_shape[1]:4} x"
-            f"{self._output_shape[2]:4}"
-        )
+        rep += " " * 4 * (6 - len(self.layers))
+        rep += "                -> "
+        rep += f"{self.output_shape[0]:4} "
+        rep += f"x{self.output_shape[1]:4} "
+        rep += f"x{self.output_shape[2]:4}  "
+        rep += f"{self.bflops:6.3f}"
         return rep
 
     def __setitem__(self, key: str, value: Any):

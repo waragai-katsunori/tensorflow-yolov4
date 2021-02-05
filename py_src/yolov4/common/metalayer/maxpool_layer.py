@@ -35,6 +35,16 @@ class MaxpoolLayer(BaseLayer):
         self._stride = 1
 
     @property
+    def bflops(self) -> float:
+        return (
+            self.size
+            * self.size
+            * self.input_shape[-1]
+            * self.output_shape[0]
+            * self.output_shape[0]
+        ) / 1e9
+
+    @property
     def size(self) -> int:
         return self._size
 
@@ -43,13 +53,18 @@ class MaxpoolLayer(BaseLayer):
         return self._stride
 
     def __repr__(self) -> str:
-        return (
-            f"{self._index_:4} max               {self._size:2} x"
-            f"{self._size:2} / {self._stride}   {self._input_shape[0]:4} x"
-            f"{self._input_shape[1]:4} x{self._input_shape[2]:4} "
-            f"-> {self._output_shape[0]:4} x{self._output_shape[1]:4} x"
-            f"{self._output_shape[2]:4}"
-        )
+        rep = f"{self.index:4}  "
+        rep += f"{self.type_name[:5]}_"
+        rep += f"{self.type_index:<3}           "
+        rep += f"{self.size:2} x{self.size:2} /{self.stride:2}     "
+        rep += f"{self.input_shape[0]:4} "
+        rep += f"x{self.input_shape[1]:4} "
+        rep += f"x{self.input_shape[2]:4} -> "
+        rep += f"{self.output_shape[0]:4} "
+        rep += f"x{self.output_shape[1]:4} "
+        rep += f"x{self.output_shape[2]:4}  "
+        rep += f"{self.bflops:6.3f}"
+        return rep
 
     def __setitem__(self, key: str, value: Any):
         if key in ("size", "stride"):

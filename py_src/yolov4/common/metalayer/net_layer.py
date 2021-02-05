@@ -106,7 +106,8 @@ class NetLayer(BaseLayer):
         return self._width
 
     def __repr__(self) -> str:
-        return f"batch = {self._batch}\n ind layout  filters  size/strd(dil) input_shape     ->  output_shape"
+        rep = f"batch: {self._batch}"
+        return rep
 
     def __setitem__(self, key: str, value: Any):
         if key in ("policy",):

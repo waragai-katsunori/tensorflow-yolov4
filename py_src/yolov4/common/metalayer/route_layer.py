@@ -34,6 +34,10 @@ class RouteLayer(BaseLayer):
         self._layers: tuple
 
     @property
+    def bflops(self) -> float:
+        return 0
+
+    @property
     def groups(self) -> int:
         return self._groups
 
@@ -46,15 +50,16 @@ class RouteLayer(BaseLayer):
         return self._layers
 
     def __repr__(self) -> str:
-        rep = f"{self._index_:4} route    "
-        for layer in self._layers:
+        rep = f"{self.index:4}  "
+        rep += f"{self.type_name[:5]}_"
+        rep += f"{self.type_index:<3}   "
+        for layer in self.layers:
             rep += f"{layer:3},"
-        rep += "    " * (5 - len(self._layers))
-        rep += "                   "
-        rep += (
-            f"-> {self._output_shape[0]:4} x{self._output_shape[1]:4} x"
-            f"{self._output_shape[2]:4}"
-        )
+        rep += " " * 4 * (6 - len(self.layers))
+        rep += "                -> "
+        rep += f"{self.output_shape[0]:4} "
+        rep += f"x{self.output_shape[1]:4} "
+        rep += f"x{self.output_shape[2]:4}"
         return rep
 
     def __setitem__(self, key: str, value: Any):

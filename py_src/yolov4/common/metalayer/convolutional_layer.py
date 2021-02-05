@@ -48,6 +48,25 @@ class ConvolutionalLayer(BaseLayer):
         return self._batch_normalize
 
     @property
+    def bflops(self) -> float:
+        """
+        kernel: size x size x input_filter x output_filter
+            >>
+                bias: output_filter
+                or
+                batch_normalization: output_filter x 4
+        """
+        return (
+            2
+            * self._size
+            * self._size
+            * self._input_shape[-1]
+            * self._output_shape[-1]
+            * self._output_shape[0]
+            * self._output_shape[1]
+        ) / 1e9
+
+    @property
     def filters(self) -> int:
         return self._filters
 
@@ -70,13 +89,19 @@ class ConvolutionalLayer(BaseLayer):
         return self._stride
 
     def __repr__(self) -> str:
-        return (
-            f"{self._index_:4} conv    {self.filters:4}      {self._size:2} x"
-            f"{self._size:2} / {self._stride}   {self._input_shape[0]:4} x"
-            f"{self._input_shape[1]:4} x{self._input_shape[2]:4} "
-            f"-> {self._output_shape[0]:4} x{self._output_shape[1]:4} x"
-            f"{self._output_shape[2]:4}"
-        )
+        rep = f"{self.index:4}  "
+        rep += f"{self.type_name[:5]}_"
+        rep += f"{self.type_index:<3}  "
+        rep += f"{self.filters:4}     "
+        rep += f"{self.size:2} x{self.size:2} /{self.stride:2}     "
+        rep += f"{self.input_shape[0]:4} "
+        rep += f"x{self.input_shape[1]:4} "
+        rep += f"x{self.input_shape[2]:4} -> "
+        rep += f"{self.output_shape[0]:4} "
+        rep += f"x{self.output_shape[1]:4} "
+        rep += f"x{self.output_shape[2]:4}  "
+        rep += f"{self.bflops:6.3f}"
+        return rep
 
     def __setitem__(self, key: str, value: Any):
         if key in ("activation",):

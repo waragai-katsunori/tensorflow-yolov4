@@ -49,8 +49,15 @@ class YOLOConfig:
 
     def summary(self):
         print(self._metalayers[-1])
+        print(
+            "index layer No. filters  size/strd(dil)   input_shape         "
+            "output_shape    1e9 flops"
+        )
+        total_bflops = 0
         for i in range(self._layer_count["total"]):
             print(self._metalayers[i])
+            total_bflops += self._metalayers[i].bflops
+        print(f"Total B(1e9)flops: {total_bflops:6.3f}")
 
     # Parse ####################################################################
 
