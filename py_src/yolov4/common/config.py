@@ -21,29 +21,43 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from typing import Any, Dict, ItemsView, KeysView, List, Tuple, ValuesView
+from typing import Any, Dict, Tuple
 
 from . import parser
 
 
 class YOLOConfig:
     def __init__(self):
-        self._cfg: Dict[str, Dict[str, Any]] = {}
-        self._count: Dict[str, int]
+        self._metalayers: Dict[str, Any] = {}
+        self._layer_count: Dict[str, int]
         self._model_name: str
         self._names: Dict[int, str] = {}
 
         self.output_shape: Tuple[tuple]
         self.with_head: bool
 
+    def find_metalayer(self, layer_type: str, layer_index: int) -> Any:
+        """
+        Usage:
+            last_yolo_layer = config.find_metalayer("yolo", -1)
+        """
+        if layer_index < 0:
+            count = self._layer_count[layer_type]
+            layer_index = count + layer_index
+
+        return self._metalayers[f"{layer_type}_{layer_index}"]
+
     # Parse ####################################################################
 
     def parse_cfg(self, cfg_path: str):
-        self._cfg, self._count, self._model_name = parser.parse_cfg(
-            cfg_path=cfg_path
-        )
+        (
+            self._metalayers,
+            self._layer_count,
+            self._model_name,
+        ) = parser.parse_cfg(cfg_path=cfg_path)
         if len(self._names) != 0:
-            if self._cfg["yolo0"]["classes"] != len(self._names):
+            yolo_0 = self._metalayers["yolo_0"]
+            if yolo_0.classes != len(self._names):
                 raise RuntimeError(
                     "YOLOConfig: '[yolo] classes' of 'cfg' and the number of"
                     " 'names' do not match."
@@ -51,8 +65,9 @@ class YOLOConfig:
 
     def parse_names(self, names_path: str):
         self._names = parser.parse_names(names_path=names_path)
-        if len(self._cfg) != 0:
-            if self._cfg["yolo0"]["classes"] != len(self._names):
+        if len(self._metalayers) != 0:
+            yolo_0 = self._metalayers["yolo_0"]
+            if yolo_0.classes != len(self._names):
                 raise RuntimeError(
                     "YOLOConfig: '[yolo] classes' of 'cfg' and the number of"
                     " 'names' do not match."
@@ -61,20 +76,16 @@ class YOLOConfig:
     # Property #################################################################
 
     @property
-    def count(self) -> Dict[str, int]:
+    def layer_count(self) -> Dict[str, int]:
         """
         key: layer_type
         value: the number of layers of the same type
         """
-        return self._count
+        return self._layer_count
 
     @property
-    def input_shape(self) -> Tuple[int, int, int]:
-        return (
-            self["net"]["height"],
-            self["net"]["width"],
-            self["net"]["channels"],
-        )
+    def metalayers(self) -> Dict[str, Any]:
+        return self._metalayers
 
     @property
     def model_name(self) -> str:
@@ -82,24 +93,12 @@ class YOLOConfig:
 
     @property
     def names(self) -> Dict[int, str]:
+        """
+        class names
+        """
         return self._names
-
-    @property
-    def tiny(self) -> bool:
-        return len(self._cfg) < 70
-
-    # Dict #####################################################################
-
-    def items(self) -> ItemsView[str, Any]:
-        return self._cfg.items()
-
-    def keys(self) -> KeysView[str]:
-        return self._cfg.keys()
-
-    def values(self) -> ValuesView[Any]:
-        return self._cfg.values()
 
     # Magic ####################################################################
 
-    def __getitem__(self, key: str) -> Any:
-        return self._cfg[key]
+    def __getattr__(self, metalayer: str) -> Any:
+        return self._metalayers[metalayer]

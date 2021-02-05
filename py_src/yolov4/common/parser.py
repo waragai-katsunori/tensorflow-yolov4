@@ -28,75 +28,24 @@ from typing import Any, Dict, Tuple
 
 import numpy as np
 
+from .metalayer import (
+    ConvolutionalLayer,
+    MaxpoolLayer,
+    NetLayer,
+    RouteLayer,
+    ShortcutLayer,
+    UpsampleLayer,
+    YoloLayer,
+)
+
 
 def parse_cfg(
     cfg_path: str,
-) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, int], str]:
-    layer_meta = {
-        "net": {
-            "batch": "int",
-            "subdivisions": "int",
-            "width": "int",
-            "height": "int",
-            "channels": "int",
-            "angle": "bool",
-            "saturation": "float",
-            "exposure": "float",
-            "hue": "float",
-            "mosaic": "bool",
-            "momentum": "float",
-            "decay": "float",
-            "learning_rate": "float",
-            "burn_in": "int",
-            "max_batches": "int",
-            "policy": "str",
-            "power": "int",
-            "steps": "int_list",
-            "scales": "float_list",
-        },
-        "convolutional": {
-            "batch_normalize": "int",
-            "filters": "int",
-            "size": "int",
-            "stride": "int",
-            "pad": "bool",
-            "activation": "str",
-        },
-        "maxpool": {
-            "size": "int",
-            "stride": "int",
-        },
-        "route": {
-            "layers": "index_list",
-            "groups": "int",
-            "group_id": "int",
-        },
-        "shortcut": {"from": "index_list", "activation": "str"},
-        "upsample": {
-            "stride": "int",
-        },
-        "yolo": {
-            "mask": "int_list",
-            "anchors": "other",
-            "num": "int",
-            "classes": "int",
-            "ignore_thresh": "float",
-            "truth_thresh": "float",
-            "jitter": "float",
-            "random": "bool",
-            "resize": "float",
-            "scale_x_y": "float",
-            "iou_thresh": "float",
-            "iou_loss": "str",
-            "iou_normalizer": "float",
-            "cls_normalizer": "float",
-            "max_delta": "int",
-            "nms_kind": "str",
-            "beta_nms": "float",
-        },
-    }
-
-    config: Dict[str, Dict[str, Any]] = {}
+) -> Tuple[Dict[str, Any], Dict[str, int], str]:
+    """
+    return Dict[layer_name, metalayer], Dict[layer_type, count], model_name
+    """
+    metalayers: Dict[str, Any] = {}
     count: Dict[str, int] = {
         "convolutional": 0,
         "maxpool": 0,
@@ -106,81 +55,52 @@ def parse_cfg(
         "upsample": 0,
         "yolo": 0,
     }
-    layer_count: int = -1
+    layer_index: int = -2
     layer_type: str = "net"
-    layer_name: str = ""
+
+    meta_layer: Dict[str, Any] = {
+        "convolutional": ConvolutionalLayer,
+        "maxpool": MaxpoolLayer,
+        "net": NetLayer,
+        "route": RouteLayer,
+        "shortcut": ShortcutLayer,
+        "upsample": UpsampleLayer,
+        "yolo": YoloLayer,
+    }
 
     with open(cfg_path, "r") as fd:
+        layer = NetLayer(index=-1, type_index=-1)
         for line in fd:
             line = line.strip().split("#")[0]
             if line == "":
                 continue
+
             if line[0] == "[":
-                # layer name
-                count[layer_type] += 1
                 layer_type = line[1:-1]
-                if layer_type == "net":
-                    layer_name = layer_type
-                else:
-                    layer_count += 1
-                    layer_name = layer_type + str(count[layer_type])
-                config[layer_name] = {"count": layer_count, "type": layer_type}
-                if layer_type == "net":
-                    config[layer_name].setdefault("mosaic", False)
-                    config[layer_name].setdefault("power", 4)
+                layer_index += 1
+                count[layer_type] += 1
+
+                layer = meta_layer[layer_type](
+                    index=layer_index, type_index=count[layer_type] - 1
+                )
+                metalayers[layer.name] = layer
+
             else:
                 # layer option
                 option, value = line.split("=")
                 option = option.strip()
                 value = value.strip()
-
                 try:
-                    if layer_meta[layer_type][option] == "int":
-                        value = int(value)
-                    elif layer_meta[layer_type][option] == "float":
-                        value = float(value)
-                    elif layer_meta[layer_type][option] == "str":
-                        pass
-                    elif layer_meta[layer_type][option] == "bool":
-                        value = bool(int(value))
-                    elif layer_meta[layer_type][option] == "index_list":
-                        value = tuple(
-                            int(i)
-                            if int(i) >= 0
-                            else config[layer_name]["count"] + int(i)
-                            for i in value.split(",")
-                        )
-                    elif layer_meta[layer_type][option] == "int_list":
-                        value = tuple(int(i.strip()) for i in value.split(","))
-                    elif layer_meta[layer_type][option] == "float_list":
-                        value = tuple(
-                            float(i.strip()) for i in value.split(",")
-                        )
-                    elif layer_meta[layer_type][option] == "other":
-                        if layer_type == "yolo":
-                            if option == "anchors":
-                                value = [
-                                    int(i.strip()) for i in value.split(",")
-                                ]
-                                _value = []
-                                for i in range(len(value) // 2):
-                                    _value.append(
-                                        (value[2 * i], value[2 * i + 1])
-                                    )
-                                value = tuple(_value)
+                    metalayers[layer.name][option] = value
                 except KeyError as error:
                     raise RuntimeError(
-                        f"parse_cfg: [{layer_name}] '{option}' is not"
+                        f"parse_cfg: [{layer.name}] '{option}' is not"
                         " supported."
                     ) from error
 
-                config[layer_name][option] = value
-
-    count[layer_type] += 1
-
     model_name = pathlib.Path(cfg_path).stem
 
-    return config, count, model_name
+    return metalayers, count, model_name
 
 
 def parse_names(names_path: str) -> Dict[int, str]:

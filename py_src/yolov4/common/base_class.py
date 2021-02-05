@@ -46,9 +46,10 @@ class BaseClass:
             image = yolo.resize_image(image)
             image, ground_truth = yolo.resize_image(image, ground_truth)
         """
+        input_shape = self.config.net.input_shape
         return media.resize_image(
             image,
-            target_shape=self.config.input_shape,
+            target_shape=input_shape,
             ground_truth=ground_truth,
         )
 
@@ -63,9 +64,10 @@ class BaseClass:
 
         @return Dim(-1, (x, y, w, h, class_id, probability))
         """
+        input_shape = self.config.net.input_shape
         return predict.candidates_to_pred_bboxes(
             candidates,
-            input_shape=self.config.input_shape,
+            input_shape=input_shape,
             iou_threshold=iou_threshold,
             score_threshold=score_threshold,
         )
@@ -75,9 +77,10 @@ class BaseClass:
         @param pred_bboxes:    Dim(-1, (x, y, w, h, class_id, probability))
         @param original_shape: (height, width, channels)
         """
+        input_shape = self.config.net.input_shape
         return predict.fit_pred_bboxes_to_original(
             pred_bboxes,
-            input_shape=self.config.input_shape,
+            input_shape=input_shape,
             original_shape=original_shape,
         )
 
