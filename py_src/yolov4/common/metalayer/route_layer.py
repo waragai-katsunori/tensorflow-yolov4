@@ -45,6 +45,18 @@ class RouteLayer(BaseLayer):
     def layers(self) -> tuple:
         return self._layers
 
+    def __repr__(self) -> str:
+        rep = f"{self._index_:4} route    "
+        for layer in self._layers:
+            rep += f"{layer:3},"
+        rep += "    " * (5 - len(self._layers))
+        rep += "                   "
+        rep += (
+            f"-> {self._output_shape[0]:4} x{self._output_shape[1]:4} x"
+            f"{self._output_shape[2]:4}"
+        )
+        return rep
+
     def __setitem__(self, key: str, value: Any):
         if key in ("groups", "group_id"):
             self.__setattr__(f"_{key}", int(value))
@@ -56,5 +68,26 @@ class RouteLayer(BaseLayer):
                     for i in value.split(",")
                 ),
             )
+        elif key == "input_shape":
+            self.__setattr__(f"_{key}", value)
+            if self._groups != 1:
+                # split
+                self._output_shape = (
+                    self._input_shape[0],
+                    self._input_shape[1],
+                    self._input_shape[2] // self._groups,
+                )
+            else:
+                if len(self._layers) == 1:
+                    # route
+                    self._output_shape = self._input_shape
+                else:
+                    # concatenate
+                    output_shape = [*self._input_shape[0]]
+                    output_shape[-1] = 0
+                    for input_shape in self._input_shape:
+                        output_shape[-1] += input_shape[-1]
+                    self._output_shape = tuple(output_shape)
+
         else:
             raise KeyError(f"'{key}' is not supported")

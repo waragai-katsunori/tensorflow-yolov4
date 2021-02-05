@@ -42,8 +42,24 @@ class MaxpoolLayer(BaseLayer):
     def stride(self) -> int:
         return self._stride
 
+    def __repr__(self) -> str:
+        return (
+            f"{self._index_:4} max               {self._size:2} x"
+            f"{self._size:2} / {self._stride}   {self._input_shape[0]:4} x"
+            f"{self._input_shape[1]:4} x{self._input_shape[2]:4} "
+            f"-> {self._output_shape[0]:4} x{self._output_shape[1]:4} x"
+            f"{self._output_shape[2]:4}"
+        )
+
     def __setitem__(self, key: str, value: Any):
         if key in ("size", "stride"):
             self.__setattr__(f"_{key}", int(value))
+        elif key == "input_shape":
+            self.__setattr__(f"_{key}", value)
+            self._output_shape = (
+                self._input_shape[0] // self._stride,
+                self._input_shape[1] // self._stride,
+                self._input_shape[2],
+            )
         else:
             raise KeyError(f"'{key}' is not supported")

@@ -69,6 +69,15 @@ class ConvolutionalLayer(BaseLayer):
     def stride(self) -> int:
         return self._stride
 
+    def __repr__(self) -> str:
+        return (
+            f"{self._index_:4} conv    {self.filters:4}      {self._size:2} x"
+            f"{self._size:2} / {self._stride}   {self._input_shape[0]:4} x"
+            f"{self._input_shape[1]:4} x{self._input_shape[2]:4} "
+            f"-> {self._output_shape[0]:4} x{self._output_shape[1]:4} x"
+            f"{self._output_shape[2]:4}"
+        )
+
     def __setitem__(self, key: str, value: Any):
         if key in ("activation",):
             self.__setattr__(f"_{key}", str(value))
@@ -76,5 +85,12 @@ class ConvolutionalLayer(BaseLayer):
             self.__setattr__(f"_{key}", int(value))
         elif key in ("pad",):
             self.__setattr__(f"_{key}", bool(int(value)))
+        elif key == "input_shape":
+            self.__setattr__(f"_{key}", value)
+            self._output_shape = (
+                self._input_shape[0] // self._stride,
+                self._input_shape[1] // self._stride,
+                self._filters,
+            )
         else:
             raise KeyError(f"'{key}' is not supported")

@@ -41,7 +41,19 @@ class ShortcutLayer(BaseLayer):
     @property
     def layers(self) -> tuple:
         # 'from' is python keyword.
-        return self._from
+        return tuple([*self._from, self._index_ - 1])
+
+    def __repr__(self) -> str:
+        rep = f"{self._index_:4} shortcut "
+        for layer in self.layers:
+            rep += f"{layer:3},"
+        rep += "    " * (5 - len(self.layers))
+        rep += "                   "
+        rep += (
+            f"-> {self._output_shape[0]:4} x{self._output_shape[1]:4} x"
+            f"{self._output_shape[2]:4}"
+        )
+        return rep
 
     def __setitem__(self, key: str, value: Any):
         if key in ("activation",):
@@ -54,5 +66,8 @@ class ShortcutLayer(BaseLayer):
                     for i in value.split(",")
                 ),
             )
+        elif key == "input_shape":
+            self.__setattr__(f"_{key}", value)
+            self._output_shape = self._input_shape[0]
         else:
             raise KeyError(f"'{key}' is not supported")

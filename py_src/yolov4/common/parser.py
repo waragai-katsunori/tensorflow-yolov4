@@ -24,7 +24,7 @@ SOFTWARE.
 from os import path
 import pathlib
 import random
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 
@@ -41,21 +41,24 @@ from .metalayer import (
 
 def parse_cfg(
     cfg_path: str,
-) -> Tuple[Dict[str, Any], Dict[str, int], str]:
+) -> Tuple[Dict[Union[str, int], Any], Dict[str, int], str]:
     """
-    return Dict[layer_name, metalayer], Dict[layer_type, count], model_name
+    @return
+        Dict[layer_name or layer_index, metalayer]
+        Dict[layer_type, count]
+        model_name
     """
-    metalayers: Dict[str, Any] = {}
+    metalayers: Dict[Union[str, int], Any] = {}
     count: Dict[str, int] = {
         "convolutional": 0,
         "maxpool": 0,
         "net": 0,
         "route": 0,
         "shortcut": 0,
+        "total": -1,
         "upsample": 0,
         "yolo": 0,
     }
-    layer_index: int = -2
     layer_type: str = "net"
 
     meta_layer: Dict[str, Any] = {
@@ -77,13 +80,14 @@ def parse_cfg(
 
             if line[0] == "[":
                 layer_type = line[1:-1]
-                layer_index += 1
+                count["total"] += 1
                 count[layer_type] += 1
 
                 layer = meta_layer[layer_type](
-                    index=layer_index, type_index=count[layer_type] - 1
+                    index=count["total"] - 1, type_index=count[layer_type] - 1
                 )
                 metalayers[layer.name] = layer
+                metalayers[count["total"] - 1] = layer
 
             else:
                 # layer option
@@ -97,6 +101,20 @@ def parse_cfg(
                         f"parse_cfg: [{layer.name}] '{option}' is not"
                         " supported."
                     ) from error
+
+    # Build layer
+    for index in range(count["total"]):
+        layer = metalayers[index]
+
+        output_shape = metalayers[index - 1].output_shape
+        if layer.type_name in ("route", "shortcut"):
+            if len(layer.layers) > 1:
+                output_shape = [
+                    metalayers[i].output_shape for i in layer.layers
+                ]
+            else:
+                output_shape = metalayers[layer.layers[0]].output_shape
+        layer["input_shape"] = output_shape
 
     model_name = pathlib.Path(cfg_path).stem
 

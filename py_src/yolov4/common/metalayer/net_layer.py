@@ -59,6 +59,11 @@ class NetLayer(BaseLayer):
         return self._height
 
     @property
+    def input_shape(self) -> tuple:
+        # override
+        return (self._height, self._width, self._channels)
+
+    @property
     def learning_rate(self) -> float:
         return self._learning_rate
 
@@ -74,6 +79,11 @@ class NetLayer(BaseLayer):
     def name(self) -> str:
         # override
         return self._type_name_
+
+    @property
+    def output_shape(self) -> tuple:
+        # override
+        return (self._height, self._width, self._channels)
 
     @property
     def policy(self) -> str:
@@ -94,6 +104,9 @@ class NetLayer(BaseLayer):
     @property
     def width(self) -> int:
         return self._width
+
+    def __repr__(self) -> str:
+        return f"batch = {self._batch}\n ind layout  filters  size/strd(dil) input_shape     ->  output_shape"
 
     def __setitem__(self, key: str, value: Any):
         if key in ("policy",):

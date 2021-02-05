@@ -21,14 +21,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Union
 
 from . import parser
 
 
 class YOLOConfig:
     def __init__(self):
-        self._metalayers: Dict[str, Any] = {}
+        self._metalayers: Dict[Union[str, int], Any] = {}
         self._layer_count: Dict[str, int]
         self._model_name: str
         self._names: Dict[int, str] = {}
@@ -46,6 +46,11 @@ class YOLOConfig:
             layer_index = count + layer_index
 
         return self._metalayers[f"{layer_type}_{layer_index}"]
+
+    def summary(self):
+        print(self._metalayers[-1])
+        for i in range(self._layer_count["total"]):
+            print(self._metalayers[i])
 
     # Parse ####################################################################
 

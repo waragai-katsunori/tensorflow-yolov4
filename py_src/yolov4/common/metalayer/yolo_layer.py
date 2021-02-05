@@ -39,6 +39,7 @@ class YoloLayer(BaseLayer):
         self._iou_normalizer = 0.75
         self._mask: tuple
         self._num = 1
+        self._obj_normalizer = 1.0
         self._scale_x_y = 1.0
 
     @property
@@ -81,12 +82,23 @@ class YoloLayer(BaseLayer):
         return self._mask
 
     @property
+    def obj_normalizer(self) -> float:
+        return self._obj_normalizer
+
+    @property
     def scale_x_y(self) -> float:
         return self._scale_x_y
 
     @property
     def total(self) -> int:
         return self._num
+
+    def __repr__(self) -> str:
+        return (
+            f"{self._index_:4} yolo iou_loss: {self._iou_loss}, iou_norm: "
+            f"{self._iou_normalizer}, obj_norm: {self._obj_normalizer}, "
+            f"cls_norm: {self._cls_normalizer}, scale_x_y {self._scale_x_y}"
+        )
 
     def __setitem__(self, key: str, value: Any):
         if key in (
@@ -101,6 +113,7 @@ class YoloLayer(BaseLayer):
             "ignore_thresh",
             "iou_thresh",
             "iou_normalizer",
+            "obj_normalizer",
             "scale_x_y",
         ):
             self.__setattr__(f"_{key}", float(value))
@@ -114,5 +127,8 @@ class YoloLayer(BaseLayer):
             for i in range(len(value) // 2):
                 _value.append((value[2 * i], value[2 * i + 1]))
             self.__setattr__(f"_{key}", tuple(_value))
+        elif key == "input_shape":
+            self.__setattr__(f"_{key}", value)
+            self._output_shape = self._input_shape
         else:
             raise KeyError(f"'{key}' is not supported")
