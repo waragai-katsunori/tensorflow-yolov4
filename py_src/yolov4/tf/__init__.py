@@ -48,10 +48,9 @@ class YOLOv4(BaseClass):
 
     def make_model(self):
         keras.backend.clear_session()
-        _input = keras.layers.Input(self.config.input_shape)
+        _input = keras.layers.Input(self.config.net.input_shape)
         self._model = YOLOv4Model(self.config)
         self._model(_input)
-        self.config.output_shape = self._model.output_shape
 
         if not self.config.with_head:
             self._head = tuple(
@@ -147,6 +146,12 @@ class YOLOv4(BaseClass):
         with tf.io.gfile.GFile(tflite_path, "wb") as fd:
             fd.write(tflite_model)
 
+    def summary(self, summary_type: str = "tf"):
+        if summary_type == "tf":
+            self._model.summary()
+        else:
+            self.config.summary()
+
     #############
     # Inference #
     #############
@@ -222,7 +227,7 @@ class YOLOv4(BaseClass):
 
         if optimizer is None:
             optimizer = keras.optimizers.Adam(
-                learning_rate=self.config["net"]["learning_rate"]
+                learning_rate=self.config.net.learning_rate
             )
 
         self._model.compile(
@@ -243,7 +248,7 @@ class YOLOv4(BaseClass):
         callbacks = callbacks or []
         callbacks.append(YOLOCallbackAtEachStep(config=self.config))
 
-        epochs = self.config["net"]["max_batches"] // len(dataset) + 1
+        epochs = self.config.net.max_batches // len(dataset) + 1
 
         return self._model.fit(
             dataset,
