@@ -37,80 +37,83 @@ class YOLOv4Model(keras.Model):
 
         # Model ################################################################
 
-        _l2 = None
+        _l2 = keras.regularizers.L2(l2=0.005)
 
         self._model_layers = []
-        layer_name: str
-        layer_option: Dict[str, Any]
-        for layer_name, layer_option in config.items():
-            if layer_option["type"] == "convolutional":
+
+        for index in range(config.layer_count["total"]):
+            metalayer = config.metalayers[index]
+
+            if metalayer.type_name == "convolutional":
                 self._model_layers.append(
                     YOLOConv2D(
-                        activation=layer_option["activation"],
-                        filters=layer_option["filters"],
+                        activation=metalayer.activation,
+                        filters=metalayer.filters,
                         kernel_regularizer=_l2,
-                        name=layer_name,
-                        pad=layer_option["pad"],
-                        size=layer_option["size"],
-                        stride=layer_option["stride"],
+                        name=metalayer.name,
+                        padding=metalayer.padding,
+                        size=metalayer.size,
+                        stride=metalayer.stride,
                     )
                 )
 
-            elif layer_option["type"] == "route":
-                if "groups" in layer_option:
+            elif metalayer.type_name == "route":
+                if metalayer.groups != 1:
                     self._model_layers.append(
                         keras.layers.Lambda(
                             _split_and_get(
-                                layer_option["groups"], layer_option["group_id"]
+                                groups=metalayer.groups,
+                                group_id=metalayer.group_id,
                             ),
-                            name=layer_name,
+                            name=metalayer.name,
                         )
                     )
                 else:
-                    if len(layer_option["layers"]) == 1:
+                    if len(metalayer.layers) == 1:
                         self._model_layers.append(
-                            keras.layers.Lambda(lambda x: x, name=layer_name)
+                            keras.layers.Lambda(
+                                lambda x: x, name=metalayer.name
+                            )
                         )
                     else:
                         self._model_layers.append(
-                            keras.layers.Concatenate(axis=-1, name=layer_name)
+                            keras.layers.Concatenate(
+                                axis=-1, name=metalayer.name
+                            )
                         )
 
-            elif layer_option["type"] == "shortcut":
-                self._model_layers.append(keras.layers.Add(name=layer_name))
+            elif metalayer.type_name == "shortcut":
+                self._model_layers.append(keras.layers.Add(name=metalayer.name))
 
-            elif layer_option["type"] == "maxpool":
+            elif metalayer.type_name == "maxpool":
                 self._model_layers.append(
                     keras.layers.MaxPooling2D(
-                        name=layer_name,
+                        name=metalayer.name,
                         padding="same",
-                        pool_size=(layer_option["size"], layer_option["size"]),
+                        pool_size=(metalayer.size, metalayer.size),
                         strides=(
-                            layer_option["stride"],
-                            layer_option["stride"],
+                            metalayer.stride,
+                            metalayer.stride,
                         ),
                     )
                 )
 
-            elif layer_option["type"] == "upsample":
+            elif metalayer.type_name == "upsample":
                 self._model_layers.append(
                     keras.layers.UpSampling2D(
-                        interpolation="bilinear", name=layer_name
+                        interpolation="bilinear", name=metalayer.name
                     )
                 )
 
-            elif layer_option["type"] == "yolo":
+            elif metalayer.type_name == "yolo":
                 if config.with_head:
                     self._model_layers.append(
-                        YOLOv3Head(config=config, name=layer_name)
+                        YOLOv3Head(config=config, name=metalayer.name)
                     )
                 else:
                     self._model_layers.append(
-                        keras.layers.Lambda(lambda x: x, name=layer_name)
+                        keras.layers.Lambda(lambda x: x, name=metalayer.name)
                     )
-
-            elif layer_option["type"] == "net":
-                _l2 = keras.regularizers.L2(l2=config["net"]["decay"])
 
         # Training #############################################################
 
@@ -119,46 +122,42 @@ class YOLOv4Model(keras.Model):
     def call(self, x):
         output = []
         return_val = []
-        layer_option: Dict[str, Any]
-        for layer_option in self._model_config.values():
-            layer_number = layer_option["count"]
-            if layer_number == -1:
-                continue
-            layer_function = self._model_layers[layer_number]
 
-            if layer_option["type"] == "route":
-                if "groups" in layer_option:
-                    index = layer_option["layers"][0]
+        for index in range(self._model_config.layer_count["total"]):
+            metalayer = self._model_config.metalayers[index]
+            layer_function = self._model_layers[index]
+
+            if metalayer.type_name == "route":
+                if metalayer.groups != 1:
+                    index = metalayer.layers[0]
                     output.append(layer_function(output[index]))
                 else:
-                    if len(layer_option["layers"]) == 1:
-                        index = layer_option["layers"][0]
+                    if len(metalayer.layers) == 1:
+                        index = metalayer.layers[0]
                         output.append(layer_function(output[index]))
                     else:
                         output.append(
                             layer_function(
-                                [output[i] for i in layer_option["layers"]],
+                                [output[i] for i in metalayer.layers],
                             )
                         )
 
-            elif layer_option["type"] == "shortcut":
+            elif metalayer.type_name == "shortcut":
+                # from -> layers
                 output.append(
                     layer_function(
-                        [
-                            output[layer_number - 1],
-                            *[output[i] for i in layer_option["from"]],
-                        ]
+                        [output[i] for i in metalayer.layers],
                     )
                 )
 
             else:
-                if layer_number == 0:
+                if index == 0:
                     output.append(layer_function(x))
                 else:
-                    output.append(layer_function(output[layer_number - 1]))
+                    output.append(layer_function(output[index - 1]))
 
-                if layer_option["type"] == "yolo":
-                    return_val.append(output[layer_number])
+                if metalayer.type_name == "yolo":
+                    return_val.append(output[index])
 
         return return_val
 
@@ -166,10 +165,9 @@ class YOLOv4Model(keras.Model):
 class YOLOv3Head(keras.Model):
     def __init__(self, config: YOLOConfig, name: str):
         super().__init__(name=name)
-
+        metalayer = config.metalayers[self.name]
         self._anchors = tuple(
-            config[self.name]["anchors"][mask]
-            for mask in config[self.name]["mask"]
+            metalayer.anchors[mask] for mask in metalayer.mask
         )
 
         self._grid_coord: Tuple[tuple]
@@ -177,13 +175,13 @@ class YOLOv3Head(keras.Model):
         self._inver_grid_wh: Tuple[float, float]
 
         self._inver_image_wh = (
-            1 / config["net"]["width"],
-            1 / config["net"]["height"],
+            1 / config.net.width,
+            1 / config.net.height,
         )
 
         self._return_shape: Tuple[int, int, int]
 
-        self._scale_x_y = config[self.name]["scale_x_y"]
+        self._scale_x_y = metalayer.scale_x_y
 
     def build(self, grid_shape):
         _, grid_height, grid_width, filters = grid_shape
