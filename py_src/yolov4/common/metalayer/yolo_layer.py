@@ -37,7 +37,9 @@ class YoloLayer(BaseLayer):
         self._iou_thresh = 1.0
         self._iou_thresh_kind = "iou"
         self._iou_normalizer = 0.75
+        self._label_smooth_eps = 0.0
         self._mask: tuple
+        self._max = 200
         self._num = 1
         self._obj_normalizer = 1.0
         self._scale_x_y = 1.0
@@ -82,8 +84,16 @@ class YoloLayer(BaseLayer):
         return self._iou_normalizer
 
     @property
+    def label_smooth_eps(self) -> float:
+        return self._label_smooth_eps
+
+    @property
     def mask(self) -> tuple:
         return self._mask
+
+    @property
+    def max(self) -> int:
+        return self._max
 
     @property
     def obj_normalizer(self) -> float:
@@ -115,13 +125,14 @@ class YoloLayer(BaseLayer):
             "iou_thresh_kind",
         ):
             self.__setattr__(f"_{key}", str(value))
-        elif key in ("classes", "num"):
+        elif key in ("classes", "max", "num"):
             self.__setattr__(f"_{key}", int(value))
         elif key in (
             "cls_normalizer",
             "ignore_thresh",
             "iou_thresh",
             "iou_normalizer",
+            "label_smooth_eps",
             "obj_normalizer",
             "scale_x_y",
         ):
