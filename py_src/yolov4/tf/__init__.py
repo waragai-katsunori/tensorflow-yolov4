@@ -52,12 +52,6 @@ class YOLOv4(BaseClass):
         self._model = YOLOv4Model(self.config)
         self._model(_input)
 
-        if not self.config.with_head:
-            self._head = tuple(
-                YOLOv3Head(config=self.config, name=f"yolo{i}")
-                for i in range(self.config.count["yolo"])
-            )
-
     def load_weights(self, weights_path: str, weights_type: str = "tf"):
         """
         Usage:
@@ -161,13 +155,7 @@ class YOLOv4(BaseClass):
         candidates = self._model(x, training=False)
         # [yolo0, yolo1, ...]
         # yolo == Dim(1, output_size * output_size * anchors, (bbox))
-        if self.config.with_head:
-            return tf.concat(candidates, axis=1)
-
-        return tf.concat(
-            [head(candidates[i]) for i, head in enumerate(self._head)],
-            axis=1,
-        )
+        return tf.concat(candidates, axis=1)
 
     def predict(
         self,

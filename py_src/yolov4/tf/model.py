@@ -107,14 +107,9 @@ class YOLOv4Model(keras.Model):
                 )
 
             elif metalayer.type == "yolo":
-                if config.with_head:
-                    self._model_layers.append(
-                        YOLOv3Head(config=config, name=metalayer.name)
-                    )
-                else:
-                    self._model_layers.append(
-                        keras.layers.Lambda(lambda x: x, name=metalayer.name)
-                    )
+                self._model_layers.append(
+                    YOLOv3Head(config=config, name=metalayer.name)
+                )
 
         # Training #############################################################
 

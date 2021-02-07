@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from typing import Any, Dict, Tuple, Union
+from typing import Any, Dict, Union
 
 from . import parser
 
@@ -32,9 +32,6 @@ class YOLOConfig:
         self._layer_count: Dict[str, int]
         self._model_name: str
         self._names: Dict[int, str] = {}
-
-        self.output_shape: Tuple[tuple]
-        self.with_head: bool
 
     def find_metalayer(self, layer_type: str, layer_index: int) -> Any:
         """
