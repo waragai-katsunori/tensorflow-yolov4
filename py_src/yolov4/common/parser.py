@@ -107,7 +107,7 @@ def parse_cfg(
         layer = metalayers[index]
 
         output_shape = metalayers[index - 1].output_shape
-        if layer.type_name in ("route", "shortcut"):
+        if layer.type in ("route", "shortcut"):
             if len(layer.layers) > 1:
                 output_shape = [
                     metalayers[i].output_shape for i in layer.layers

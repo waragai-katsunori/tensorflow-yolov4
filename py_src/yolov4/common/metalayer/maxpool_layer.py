@@ -54,7 +54,7 @@ class MaxpoolLayer(BaseLayer):
 
     def __repr__(self) -> str:
         rep = f"{self.index:4}  "
-        rep += f"{self.type_name[:5]}_"
+        rep += f"{self.type[:5]}_"
         rep += f"{self.type_index:<3}           "
         rep += f"{self.size:2} x{self.size:2} /{self.stride:2}     "
         rep += f"{self.input_shape[0]:4} "

@@ -52,10 +52,12 @@ class NetLayer(BaseLayer):
 
     @property
     def channels(self) -> int:
+        # override
         return self._channels
 
     @property
     def height(self) -> int:
+        # override
         return self._height
 
     @property
@@ -78,7 +80,7 @@ class NetLayer(BaseLayer):
     @property
     def name(self) -> str:
         # override
-        return self._type_name_
+        return self._type_
 
     @property
     def output_shape(self) -> tuple:
@@ -103,6 +105,7 @@ class NetLayer(BaseLayer):
 
     @property
     def width(self) -> int:
+        # override
         return self._width
 
     def __repr__(self) -> str:

@@ -43,7 +43,7 @@ class UpsampleLayer(BaseLayer):
 
     def __repr__(self) -> str:
         rep = f"{self.index:4}  "
-        rep += f"{self.type_name[:5]}_"
+        rep += f"{self.type[:5]}_"
         rep += f"{self.type_index:<3}                   "
         rep += f"{self.stride:2}x    "
         rep += f"{self.input_shape[0]:4} "

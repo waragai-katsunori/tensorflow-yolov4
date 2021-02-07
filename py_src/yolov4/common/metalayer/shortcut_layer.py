@@ -54,7 +54,7 @@ class ShortcutLayer(BaseLayer):
 
     def __repr__(self) -> str:
         rep = f"{self.index:4}  "
-        rep += f"{self.type_name[:5]}_"
+        rep += f"{self.type[:5]}_"
         rep += f"{self.type_index:<3}   "
         for layer in self.layers:
             rep += f"{layer:3},"

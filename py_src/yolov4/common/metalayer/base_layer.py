@@ -29,7 +29,7 @@ class BaseLayer:
         self._input_shape: tuple
         self._output_shape: tuple
         self._type_index_ = type_index
-        self._type_name_ = type_name
+        self._type_ = type_name
 
     @property
     def channels(self) -> int:
@@ -41,6 +41,9 @@ class BaseLayer:
 
     @property
     def index(self) -> int:
+        """
+        in the total model
+        """
         return self._index_
 
     @property
@@ -52,7 +55,7 @@ class BaseLayer:
 
     @property
     def name(self) -> str:
-        return f"{self._type_name_}_{self._type_index_}"
+        return f"{self._type_}_{self._type_index_}"
 
     @property
     def output_shape(self) -> tuple:
@@ -60,11 +63,14 @@ class BaseLayer:
 
     @property
     def type_index(self) -> int:
+        """
+        in the same type
+        """
         return self._type_index_
 
     @property
-    def type_name(self) -> str:
-        return self._type_name_
+    def type(self) -> str:
+        return self._type_
 
     @property
     def width(self) -> int:

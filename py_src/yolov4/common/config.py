@@ -90,13 +90,13 @@ class YOLOConfig:
     @property
     def layer_count(self) -> Dict[str, int]:
         """
-        key: layer_type
+        key: metalayer.type
         value: the number of layers of the same type
         """
         return self._layer_count
 
     @property
-    def metalayers(self) -> Dict[str, Any]:
+    def metalayers(self) -> Dict[Union[str, int], Any]:
         return self._metalayers
 
     @property

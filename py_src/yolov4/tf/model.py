@@ -44,7 +44,7 @@ class YOLOv4Model(keras.Model):
         for index in range(config.layer_count["total"]):
             metalayer = config.metalayers[index]
 
-            if metalayer.type_name == "convolutional":
+            if metalayer.type == "convolutional":
                 self._model_layers.append(
                     YOLOConv2D(
                         activation=metalayer.activation,
@@ -58,7 +58,7 @@ class YOLOv4Model(keras.Model):
                     )
                 )
 
-            elif metalayer.type_name == "route":
+            elif metalayer.type == "route":
                 if metalayer.groups != 1:
                     self._model_layers.append(
                         keras.layers.Lambda(
@@ -83,10 +83,10 @@ class YOLOv4Model(keras.Model):
                             )
                         )
 
-            elif metalayer.type_name == "shortcut":
+            elif metalayer.type == "shortcut":
                 self._model_layers.append(keras.layers.Add(name=metalayer.name))
 
-            elif metalayer.type_name == "maxpool":
+            elif metalayer.type == "maxpool":
                 self._model_layers.append(
                     keras.layers.MaxPooling2D(
                         name=metalayer.name,
@@ -99,14 +99,14 @@ class YOLOv4Model(keras.Model):
                     )
                 )
 
-            elif metalayer.type_name == "upsample":
+            elif metalayer.type == "upsample":
                 self._model_layers.append(
                     keras.layers.UpSampling2D(
                         interpolation="bilinear", name=metalayer.name
                     )
                 )
 
-            elif metalayer.type_name == "yolo":
+            elif metalayer.type == "yolo":
                 if config.with_head:
                     self._model_layers.append(
                         YOLOv3Head(config=config, name=metalayer.name)
@@ -128,7 +128,7 @@ class YOLOv4Model(keras.Model):
             metalayer = self._model_config.metalayers[index]
             layer_function = self._model_layers[index]
 
-            if metalayer.type_name == "route":
+            if metalayer.type == "route":
                 if metalayer.groups != 1:
                     index = metalayer.layers[0]
                     output.append(layer_function(output[index]))
@@ -143,7 +143,7 @@ class YOLOv4Model(keras.Model):
                             )
                         )
 
-            elif metalayer.type_name == "shortcut":
+            elif metalayer.type == "shortcut":
                 # from -> layers
                 output.append(
                     layer_function(
@@ -157,7 +157,7 @@ class YOLOv4Model(keras.Model):
                 else:
                     output.append(layer_function(output[index - 1]))
 
-                if metalayer.type_name == "yolo":
+                if metalayer.type == "yolo":
                     return_val.append(output[index])
 
         return return_val
