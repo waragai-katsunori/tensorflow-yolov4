@@ -28,10 +28,11 @@ import cv2
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+import tensorflow.keras.backend as K
 
 from . import weights
 from .dataset import YOLODataset
-from .model import YOLOv3Head, YOLOv4Model
+from .model import YOLOv4Model
 from .train import YOLOCallbackAtEachStep, YOLOv4Loss
 from ..common.base_class import BaseClass
 
@@ -152,10 +153,22 @@ class YOLOv4(BaseClass):
 
     @tf.function
     def _predict(self, x):
-        candidates = self._model(x, training=False)
+        yolos = self._model(x, training=False)
         # [yolo0, yolo1, ...]
-        # yolo == Dim(1, output_size * output_size * anchors, (bbox))
-        return tf.concat(candidates, axis=1)
+        # yolo == Dim(batch, height, width, channels)
+        candidates = []
+        for i in range(self.config.layer_count["yolo"]):
+            metayolo = self.config.find_metalayer("yolo", i)
+            stride = 5 + metayolo.classes
+            for n in range(len(metayolo.mask)):
+                candidates.append(
+                    K.reshape(
+                        yolos[i][..., n * stride : (n + 1) * stride],
+                        shape=(-1, metayolo.height * metayolo.width, stride),
+                    )
+                )
+
+        return K.concatenate(candidates, axis=1)
 
     def predict(
         self,
