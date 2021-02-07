@@ -32,11 +32,22 @@ class BaseLayer:
         self._type_name_ = type_name
 
     @property
+    def channels(self) -> int:
+        return self._input_shape[2]
+
+    @property
+    def height(self) -> int:
+        return self._input_shape[0]
+
+    @property
     def index(self) -> int:
         return self._index_
 
     @property
     def input_shape(self) -> tuple:
+        """
+        (height, width, channels)
+        """
         return tuple(self._input_shape)
 
     @property
@@ -54,3 +65,7 @@ class BaseLayer:
     @property
     def type_name(self) -> str:
         return self._type_name_
+
+    @property
+    def width(self) -> int:
+        return self._input_shape[1]
