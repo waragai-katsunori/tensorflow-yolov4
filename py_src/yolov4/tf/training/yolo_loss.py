@@ -61,7 +61,6 @@ class YOLOv4Loss(Loss):
         iou_normalizer = tf.constant(metayolo.iou_normalizer)
         mask = tf.convert_to_tensor(metayolo.mask)
         obj_normalizer = tf.constant(metayolo.obj_normalizer)
-        output_shape = tf.convert_to_tensor(metayolo.output_shape)
 
         def batch_loop(batch, iou_loss0, obj_loss0, cls_loss0):
             # y_pred0 == Dim(height, width, filters)
@@ -89,12 +88,12 @@ class YOLOv4Loss(Loss):
                 xious, ious = bbox_xiou(pred_box, true_box)
 
                 # xiou loss
-                iou_loss2 = K.sum(iou_normalizer * true_one * (1 - xious))
+                iou_loss2 = iou_normalizer * K.sum(true_one * (1 - xious))
 
                 # metrics update
                 ious = true_one * ious
                 self.model._total_truth.assign_add(
-                    K.sum(tf.cast(true_one, dtype=tf.int64))
+                    tf.cast(K.sum(true_one), dtype=tf.int64)
                 )
                 self.model._ious.assign_add(K.sum(ious))
                 self.model._recall50.assign_add(
@@ -105,28 +104,18 @@ class YOLOv4Loss(Loss):
                 )
 
                 # obj loss
-                obj_loss2 = K.sum(
-                    obj_normalizer
-                    * (
-                        -true_obj * K.log(pred_obj + K.epsilon())
-                        - (1 - true_obj) * K.log(1 - pred_obj + K.epsilon())
-                    )
+                obj_loss2 = obj_normalizer * K.sum(
+                    K.binary_crossentropy(true_obj, pred_obj)
                 )
 
                 # cls loss
-                cls_loss2 = tf.constant(0, dtype=tf.float32)
-                for j in range(output_shape[0]):
-                    for i in range(output_shape[1]):
-                        if true_one[j, i] > 0.0:
-                            cls_loss2 += K.sum(
-                                cls_normalizer
-                                * (
-                                    -true_cls[j, i]
-                                    * K.log(pred_cls[j, i] + K.epsilon())
-                                    - (1 - true_cls[j, i])
-                                    * K.log(1 - pred_cls[j, i] + K.epsilon())
-                                )
-                            )
+                cls_loss2 = cls_normalizer * K.sum(
+                    true_one
+                    * K.sum(
+                        K.binary_crossentropy(true_cls, pred_cls),
+                        axis=-1,
+                    )
+                )
 
                 return (
                     tf.add(anchor, 1),
