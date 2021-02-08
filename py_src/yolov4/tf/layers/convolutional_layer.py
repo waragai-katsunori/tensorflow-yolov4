@@ -51,11 +51,9 @@ class BatchNormalization(tf.keras.layers.BatchNormalization):
         When trying transfer learning, if you set trainable of backbone to
         `False`, you can freeze backbone.
         """
-        if not training:
-            # training = None, False, True
-            training = tf.constant(False)
-        training = tf.logical_and(training, self.trainable)
-        return super().call(x, training=training)
+        if training and self.trainable:
+            return super().call(x, training=True)
+        return super().call(x, training=False)
 
 
 class ConvolutionalLayer(Sequential):
