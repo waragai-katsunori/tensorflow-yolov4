@@ -26,7 +26,7 @@ from tensorflow.keras import Sequential
 import tensorflow.keras.backend as K
 from tensorflow.keras.layers import (
     Activation,
-    BatchNormalization,
+    # BatchNormalization,
     Conv2D,
     LeakyReLU,
     ReLU,
@@ -34,6 +34,28 @@ from tensorflow.keras.layers import (
 )
 from tensorflow.keras.regularizers import L2
 from tensorflow.keras.utils import get_custom_objects
+
+
+class BatchNormalization(tf.keras.layers.BatchNormalization):
+    def call(self, x, training=False):
+        """
+        training = False, trainable = False
+        training = False, trainable = True
+            gamma, beta, mean, and variance are fixedd
+        training = True, trainable = False
+            gamma, beta are fixed
+            mean and variance are updated
+        training = True, trainable = True
+            gamma, beta, mean, and variance are updated
+
+        When trying transfer learning, if you set trainable of backbone to
+        `False`, you can freeze backbone.
+        """
+        if not training:
+            # training = None, False, True
+            training = tf.constant(False)
+        training = tf.logical_and(training, self.trainable)
+        return super().call(x, training=training)
 
 
 class ConvolutionalLayer(Sequential):
@@ -60,7 +82,7 @@ class ConvolutionalLayer(Sequential):
 
         if metalayer.batch_normalize:
             self.add(
-                BatchNormalization(epsilon=1e-4, momentum=self.metanet.momentum)
+                BatchNormalization(epsilon=1e-5, momentum=self.metanet.momentum)
             )
 
         if metalayer.activation == "mish":
