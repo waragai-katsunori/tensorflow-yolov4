@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.layers import Layer
 
@@ -44,18 +45,19 @@ class YoloLayer(Layer):
         @return: Dim(height, width, height, channels)
         """
         sig = K.sigmoid(x)
+        sig_s = tf.split(sig, 3, axis=-1)
 
-        outputs = []
-        stride = 5 + self.metalayer.classes
+        raw_s = tf.split(x, 3, axis=-1)
+
+        output = []
         for n, mask in enumerate(self.metalayer.mask):
-            # x, y, w, h, o, c0, c1, ...
-            xy_index = n * stride
-            wh_index = xy_index + 2
-            obj_index = xy_index + 4
-            next_xy_index = xy_index + stride
+            # # x, y, w, h, o, c0, c1, ...
+            # Operation not supported on Edge TPU
+            xy, _, oc = tf.split(sig_s[n], [2, 2, -1], axis=-1)
+            _, wh, _ = tf.split(raw_s[n], [2, 2, -1], axis=-1)
 
+            # Can be Mapped to Edge TPU
             # x, y
-            xy = sig[..., xy_index:wh_index]
             if self.metalayer.scale_x_y != 1.0:
                 xy = (xy - 0.5) * self.metalayer.scale_x_y + 0.5
             xy += self.cx_cy
@@ -67,15 +69,10 @@ class YoloLayer(Layer):
                 anchor[0] / self.metanet.width,
                 anchor[1] / self.metanet.height,
             )
-            wh = x[..., wh_index:obj_index]
             wh = K.exp(wh) * anchor
 
-            # o, c0, c1, ...
-            oc = sig[..., obj_index:next_xy_index]
-
-            outputs.append(K.concatenate([xy, wh, oc], axis=-1))
-
-        return K.concatenate(outputs, axis=-1)
+            output.append(K.concatenate([xy, wh, oc], axis=-1))
+        return K.concatenate(output, axis=-1)
 
     def compute_output_shape(self, input_shape):
         return input_shape
