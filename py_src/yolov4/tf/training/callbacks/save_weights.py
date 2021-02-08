@@ -53,7 +53,9 @@ class SaveWeightsCallback(Callback):
 
         if step % self._step_per_save == 0:
             self._yolo.save_weights(
-                "{}-{}-step{}".format(self._path_prefix, step, self.extension),
+                "{}-{}-step{}".format(
+                    self._path_prefix, step.numpy(), self.extension
+                ),
                 weights_type=self._weights_type,
             )
 
