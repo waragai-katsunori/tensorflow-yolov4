@@ -29,7 +29,8 @@ from typing import List
 import cv2
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
+import tensorflow.keras.backend as K
+from tensorflow.keras.utils import Sequence
 
 from .augmentation import mosaic
 from ..training.iou import bbox_iou
@@ -38,7 +39,7 @@ from ...common.config import YOLOConfig
 from ...common.parser import parse_dataset
 
 
-class YOLODataset(keras.utils.Sequence):
+class YOLODataset(Sequence):
     def __init__(
         self,
         config: YOLOConfig,
@@ -57,6 +58,18 @@ class YOLODataset(keras.utils.Sequence):
             self._metayolos.append(config.find_metalayer("yolo", i))
         self._metanet = config.net
 
+        _anchors = []
+        for anchor in self._metayolos[-1].anchors:
+            _anchors.append(
+                [
+                    0,
+                    0,
+                    anchor[0] / self._metanet.width,
+                    anchor[1] / self._metanet.height,
+                ]
+            )
+        self._anchors = tf.convert_to_tensor(_anchors)
+
         # Data augmentation ####################################################
 
         self._augmentation: List[str] = []
@@ -70,21 +83,6 @@ class YOLODataset(keras.utils.Sequence):
             self._augmentation_batch = 0
             self._training = False
 
-        # Grid #################################################################
-
-        grid_xy = []
-        for metayolo in self._metayolos:
-            # stack Dim(height, width, 2)
-            stack = np.stack(
-                np.meshgrid(
-                    (np.arange(metayolo.width) + 0.5) / metayolo.width,
-                    (np.arange(metayolo.height) + 0.5) / metayolo.height,
-                ),
-                axis=-1,
-            )
-            grid_xy.append(stack.astype(np.float32))
-        self._grid_xy = grid_xy
-
     def _convert_bboxes_to_ground_truth(self, bboxes):
         """
         @param `bboxes`: [[b_x, b_y, b_w, b_h, class_id], ...]
@@ -93,8 +91,9 @@ class YOLODataset(keras.utils.Sequence):
             [Dim(yolo.h, yolo.w, yolo.c + len(mask))] * len(yolo)
         """
         y_true = []
+        nums = []
         label_true = 1
-        for metayolo, grdi_xy in zip(self._metayolos, self._grid_xy):
+        for metayolo in self._metayolos:
             lh, lw, lc = metayolo.output_shape
             # x, y, w, h, o, c0, c1, ...
             # x, y, w, h, o, c0, c1, ...
@@ -108,38 +107,24 @@ class YOLODataset(keras.utils.Sequence):
                 cls_index = box_index + 5
                 next_box_index = box_index + stride
 
-                gt_one[..., box_index : box_index + 2] = grdi_xy
                 if metayolo.label_smooth_eps > 0.0:
                     label_true = 1 - 0.5 * metayolo.label_smooth_eps
                     gt_one[..., cls_index:next_box_index] = (
                         0.5 * metayolo.label_smooth_eps
                     )
 
+            nums.append(np.full((lh, lw, len(metayolo.mask)), np.inf))
             y_true.append(gt_one)
 
         for t in range(min(self._metayolos[-1].max, len(bboxes))):
             truth = bboxes[t][:4]
             cls_id = int(bboxes[t][4])
-            best_iou = 0
-            best_n = 0
             truth_shift = tf.convert_to_tensor([0, 0, truth[2], truth[3]])
             ious = []
 
             # Find best Anchor
-            for n, anchor in enumerate(self._metayolos[-1].anchors):
-                pred = tf.convert_to_tensor(
-                    [
-                        0,
-                        0,
-                        anchor[0] / self._metanet.width,
-                        anchor[1] / self._metanet.height,
-                    ]
-                )
-                iou, _ = bbox_iou(truth_shift, pred)
-                ious.append(iou)
-                if iou > best_iou:
-                    best_iou = iou
-                    best_n = n
+            ious, _ = bbox_iou(truth_shift, self._anchors)
+            best_n = K.argmax(ious)
 
             # Find over iou_thresh
             masks = []
@@ -152,7 +137,7 @@ class YOLODataset(keras.utils.Sequence):
 
             masks.append(best_n)
 
-            for metayolo, gt_one in zip(self._metayolos, y_true):
+            for metayolo, gt_one, num in zip(self._metayolos, y_true, nums):
                 l_h, l_w, l_c = metayolo.output_shape
 
                 i = int(truth[0] * l_w)
@@ -170,28 +155,27 @@ class YOLODataset(keras.utils.Sequence):
                         box_index = n * stride
                         obj_index = box_index + 4
                         cls_index = box_index + 5
-                        one_index = l_c + n
+
                         # Accumulate box and obj
-                        if gt_one[j, i, obj_index] == 0.0:
-                            gt_one[j, i, box_index:obj_index] = truth
-                        else:
-                            gt_one[j, i, box_index:obj_index] += truth
-                        gt_one[j, i, obj_index] += 1
+                        gt_one[j, i, box_index:obj_index] += truth
+                        gt_one[j, i, obj_index] = 1
                         gt_one[j, i, cls_index + cls_id] = label_true
-                        gt_one[j, i, one_index] = 1
+                        if num[j, i, n] > 1e3:
+                            num[j, i, n] = 1
+                        else:
+                            num[j, i, n] += 1
 
-                # Calculate average box
-                for j in range(l_h):
-                    for i in range(l_w):
-                        for n in range(len(metayolo.mask)):
-                            box_index = n * stride
-                            obj_index = box_index + 4
-                            one_index = l_c + n
+        # Calculate average box
+        for metayolo, gt_one, num in zip(self._metayolos, y_true, nums):
+            l_c = metayolo.output_shape[-1]
+            stride = 5 + metayolo.classes
 
-                            obj = gt_one[j, i, obj_index]
-                            if obj > 1.0:
-                                gt_one[j, i, box_index:obj_index] /= obj
-                                gt_one[j, i, obj_index] = 1
+            for n in range(len(metayolo.mask)):
+                box_index = n * stride
+                obj_index = box_index + 4
+                one_index = l_c + n
+                gt_one[..., box_index:obj_index] /= num[..., n : n + 1]
+                gt_one[..., one_index] = gt_one[..., obj_index]
 
         # TODO: test code
 
