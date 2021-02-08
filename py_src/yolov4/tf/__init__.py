@@ -21,19 +21,25 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from os import makedirs, path
-import shutil
-
-import cv2
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
 import tensorflow.keras.backend as K
+from tensorflow.keras.layers import Input
+from tensorflow.keras.optimizers import Adam
 
-from . import weights
-from .dataset import YOLODataset
+from .dataset.keras_sequence import YOLODataset
 from .model import YOLOv4Model
-from .train import YOLOCallbackAtEachStep, YOLOv4Loss
+from .training.callbacks import (
+    SaveWeightsCallback,  # for exporting
+    YOLOCallbackAtEachStep,
+)
+from .training.yolo_loss import YOLOv4Loss
+from .utils.mAP import create_mAP_input_files  # for exporting
+from .utils.tflite import save_as_tflite  # for expoerting
+from .utils.weights import (
+    load_weights as _load_weights,
+    save_weights as _save_weights,
+)
 from ..common.base_class import BaseClass
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
@@ -43,14 +49,14 @@ if len(physical_devices) > 0:
 
 
 class YOLOv4(BaseClass):
-    def __init__(self):
-        super().__init__()
-        self._model = None
+    @property
+    def model(self) -> YOLOv4Model:
+        return self._model
 
     def make_model(self):
-        keras.backend.clear_session()
-        _input = keras.layers.Input(self.config.net.input_shape)
-        self._model = YOLOv4Model(self.config)
+        K.clear_session()
+        _input = Input(self.config.net.input_shape)
+        self._model = YOLOv4Model(config=self.config)
         self._model(_input)
 
     def load_weights(self, weights_path: str, weights_type: str = "tf"):
@@ -60,7 +66,7 @@ class YOLOv4(BaseClass):
             yolo.load_weights("yolov4.weights", weights_type="yolo")
         """
         if weights_type == "yolo":
-            weights.load_weights(self._model, weights_path)
+            _load_weights(self._model, weights_path)
         elif weights_type == "tf":
             self._model.load_weights(weights_path)
 
@@ -75,75 +81,16 @@ class YOLOv4(BaseClass):
         """
         to_layer = ""
         if to > 0:
-            for name, option in self.config.items():
-                if option["count"] == to - 1:
-                    to_layer = name
-                    break
+            to_layer = self.config.metalayers[to - 1].name
 
         if weights_type == "yolo":
-            weights.save_weights(self._model, weights_path, to=to_layer)
+            _save_weights(self._model, weights_path, to=to_layer)
         elif weights_type == "tf":
             self._model.save_weights(weights_path)
 
-    def save_as_tflite(
-        self,
-        tflite_path: str,
-        quantization: str = "",
-        dataset: YOLODataset = None,
-        num_calibration_steps: int = 100,
-    ):
-        """
-        Save model and weights as tflite
-
-        Usage:
-            yolo.save_as_tflite("yolov4.tflite")
-            yolo.save_as_tflite("yolov4-float16.tflite", "float16")
-            yolo.save_as_tflite("yolov4-int.tflite", "int", dataset)
-        """
-        converter = tf.lite.TFLiteConverter.from_keras_model(self._model)
-
-        _supported_ops = [
-            tf.lite.OpsSet.TFLITE_BUILTINS,
-            tf.lite.OpsSet.SELECT_TF_OPS,
-        ]
-
-        def representative_dataset_gen():
-            count = 0
-            while True:
-                for images, _ in dataset:
-                    for i in range(len(images)):
-                        yield [tf.cast(images[i : i + 1, ...], tf.float32)]
-                        count += 1
-                        if count >= num_calibration_steps:
-                            return
-
-        if quantization != "":
-            converter.optimizations = [tf.lite.Optimize.DEFAULT]
-
-        if quantization == "float16":
-            converter.target_spec.supported_types = [tf.float16]
-        elif quantization == "int":
-            converter.representative_dataset = representative_dataset_gen
-        elif quantization == "full_int8":
-            converter.experimental_new_converter = False
-            converter.representative_dataset = representative_dataset_gen
-            _supported_ops += [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-            converter.inference_input_type = tf.uint8
-            converter.inference_output_type = tf.float32
-        else:
-            raise ValueError(
-                f"YOLOv4: '{quantization}' is not a valid quantization"
-            )
-
-        converter.target_spec.supported_ops = _supported_ops
-
-        tflite_model = converter.convert()
-        with tf.io.gfile.GFile(tflite_path, "wb") as fd:
-            fd.write(tflite_model)
-
-    def summary(self, summary_type: str = "tf"):
+    def summary(self, line_length=90, summary_type: str = "tf", **kwargs):
         if summary_type == "tf":
-            self._model.summary()
+            self._model.summary(line_length=line_length, **kwargs)
         else:
             self.config.summary()
 
@@ -203,37 +150,21 @@ class YOLOv4(BaseClass):
     # Training #
     ############
 
-    def load_dataset(
-        self,
-        dataset_path: str,
-        dataset_type: str = "converted_coco",
-        image_path_prefix: str = "",
-        training: bool = False,
-    ) -> YOLODataset:
-        return YOLODataset(
-            config=self.config,
-            dataset_path=dataset_path,
-            dataset_type=dataset_type,
-            image_path_prefix=image_path_prefix,
-            training=training,
-        )
-
     def compile(
         self,
-        loss_verbose: int = 1,
         optimizer=None,
+        loss=None,
         **kwargs,
     ):
-        # TODO: steps_per_execution tensorflow2.4.0-rc4
-
         if optimizer is None:
-            optimizer = keras.optimizers.Adam(
-                learning_rate=self.config.net.learning_rate
-            )
+            optimizer = Adam(learning_rate=self.config.net.learning_rate)
 
-        self._model.compile(
+        if loss is None:
+            loss = YOLOv4Loss(config=self.config, model=self.model)
+
+        return self._model.compile(
             optimizer=optimizer,
-            loss=YOLOv4Loss(config=self.config, verbose=loss_verbose),
+            loss=loss,
             **kwargs,
         )
 
@@ -243,121 +174,25 @@ class YOLOv4(BaseClass):
         callbacks=None,
         validation_data=None,
         validation_steps=None,
-        verbose: int = 2,
+        verbose: int = 3,
         **kwargs,
     ):
+        """
+        verbose=3 is one line per step
+        """
         callbacks = callbacks or []
-        callbacks.append(YOLOCallbackAtEachStep(config=self.config))
+        callbacks.append(
+            YOLOCallbackAtEachStep(config=self.config, verbose=verbose)
+        )
 
         epochs = self.config.net.max_batches // len(dataset) + 1
 
         return self._model.fit(
             dataset,
             epochs=epochs,
-            verbose=verbose,
+            verbose=verbose if verbose < 3 else 0,
             callbacks=callbacks,
             validation_data=validation_data,
             validation_steps=validation_steps,
             **kwargs,
         )
-
-    def save_dataset_for_mAP(
-        self,
-        dataset: YOLODataset,
-        mAP_path: str,
-        images_optional: bool = False,
-        num_sample: int = None,
-    ):
-        """
-        gt: name left top right bottom
-        dr: name confidence left top right bottom
-
-        @parma `dataset`
-        @param `mAP_path`
-        @parma `images_optional`: If `True`, images are copied to the
-                `mAP_path`.
-        @param `num_sample`: Number of images for mAP. If `None`, all images in
-                `data_set` are used.
-        """
-        input_path = path.join(mAP_path, "input")
-
-        if path.exists(input_path):
-            shutil.rmtree(input_path)
-        makedirs(input_path)
-
-        gt_dir_path = path.join(input_path, "ground-truth")
-        dr_dir_path = path.join(input_path, "detection-results")
-        makedirs(gt_dir_path)
-        makedirs(dr_dir_path)
-
-        img_dir_path = ""
-        if images_optional:
-            img_dir_path = path.join(input_path, "images-optional")
-            makedirs(img_dir_path)
-
-        max_dataset_size = len(dataset)
-
-        if num_sample is None:
-            num_sample = max_dataset_size
-
-        for i in range(num_sample):
-            # image_path, [[x, y, w, h, class_id], ...]
-            _dataset = dataset._dataset[i % max_dataset_size].copy()
-
-            if images_optional:
-                image_path = path.join(img_dir_path, "image_{}.jpg".format(i))
-                shutil.copy(_dataset[0], image_path)
-
-            image = cv2.imread(_dataset[0])
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            height, width, _ = image.shape
-
-            _dataset[1] = _dataset[1] * np.array(
-                [width, height, width, height, 1]
-            )
-
-            # ground-truth
-            with open(
-                path.join(gt_dir_path, "image_{}.txt".format(i)),
-                "w",
-            ) as fd:
-                for xywhc in _dataset[1]:
-                    # name left top right bottom
-                    class_name = self.config.names[int(xywhc[4])].replace(
-                        " ", "_"
-                    )
-                    left = int(xywhc[0] - xywhc[2] / 2)
-                    top = int(xywhc[1] - xywhc[3] / 2)
-                    right = int(xywhc[0] + xywhc[2] / 2)
-                    bottom = int(xywhc[1] + xywhc[3] / 2)
-                    fd.write(
-                        "{} {} {} {} {}\n".format(
-                            class_name, left, top, right, bottom
-                        )
-                    )
-
-            pred_bboxes = self.predict(image)
-            pred_bboxes = pred_bboxes * np.array(
-                [width, height, width, height, 1, 1]
-            )
-
-            # detection-results
-            with open(
-                path.join(dr_dir_path, "image_{}.txt".format(i)),
-                "w",
-            ) as fd:
-                for xywhcp in pred_bboxes:
-                    # name confidence left top right bottom
-                    class_name = self.config.names[int(xywhcp[4])].replace(
-                        " ", "_"
-                    )
-                    probability = xywhcp[5]
-                    left = int(xywhcp[0] - xywhcp[2] / 2)
-                    top = int(xywhcp[1] - xywhcp[3] / 2)
-                    right = int(xywhcp[0] + xywhcp[2] / 2)
-                    bottom = int(xywhcp[1] + xywhcp[3] / 2)
-                    fd.write(
-                        "{} {} {} {} {} {}\n".format(
-                            class_name, probability, left, top, right, bottom
-                        )
-                    )
