@@ -59,7 +59,9 @@ class ConvolutionalLayer(Sequential):
         )
 
         if metalayer.batch_normalize:
-            self.add(BatchNormalization())
+            self.add(
+                BatchNormalization(epsilon=1e-4, momentum=self.metanet.momentum)
+            )
 
         if metalayer.activation == "mish":
             self.add(Activation("mish"))

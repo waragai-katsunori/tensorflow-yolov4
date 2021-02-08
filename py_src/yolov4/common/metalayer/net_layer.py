@@ -35,6 +35,7 @@ class NetLayer(BaseLayer):
         self._height = 0
         self._learning_rate = 0.001
         self._max_batches = 0
+        self._momentum = 0.9
         self._mosaic = False
         self._policy = "steps"
         self._power = 4
@@ -72,6 +73,10 @@ class NetLayer(BaseLayer):
     @property
     def max_batches(self) -> int:
         return self._max_batches
+
+    @property
+    def momentum(self) -> float:
+        return self._momentum
 
     @property
     def mosaic(self) -> bool:
@@ -127,7 +132,7 @@ class NetLayer(BaseLayer):
             self.__setattr__(f"_{key}", int(value))
         elif key in ("mosaic",):
             self.__setattr__(f"_{key}", bool(int(value)))
-        elif key in ("learning_rate",):
+        elif key in ("learning_rate", "momentum"):
             self.__setattr__(f"_{key}", float(value))
         elif key in ("steps",):
             self.__setattr__(
