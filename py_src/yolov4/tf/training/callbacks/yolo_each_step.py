@@ -80,12 +80,15 @@ class YOLOCallbackAtEachStep(Callback):
         # compile: steps_per_execution
         # next begin iteration number
         step = self.model._train_counter
+        spe = self.model._steps_per_execution
+        spe_f = tf.cast(spe, dtype=tf.float32)
+
         leraning_rate = K.get_value(self.model.optimizer.lr)
 
-        iou_loss = self.model._iou_loss.value()
-        obj_loss = self.model._obj_loss.value()
-        cls_loss = self.model._cls_loss.value()
-        total_loss = self.model._total_loss.value()
+        iou_loss = self.model._iou_loss.value() / spe_f
+        obj_loss = self.model._obj_loss.value() / spe_f
+        cls_loss = self.model._cls_loss.value() / spe_f
+        total_loss = self.model._total_loss.value() / spe_f
 
         total_truth = self.model._total_truth.value()
         truth = total_truth - self._prev_total_truth
