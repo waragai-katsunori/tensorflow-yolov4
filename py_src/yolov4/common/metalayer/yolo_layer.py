@@ -30,6 +30,7 @@ class YoloLayer(BaseLayer):
     def __init__(self, index: int, type_index: int):
         super().__init__(index=index, type_index=type_index, type_name="yolo")
         self._anchors: tuple
+        self._beta_nms: float
         self._classes = 20
         self._cls_normalizer = 1.0
         self._ignore_thresh = 0.5
@@ -40,6 +41,7 @@ class YoloLayer(BaseLayer):
         self._label_smooth_eps = 0.0
         self._mask: tuple
         self._max = 200
+        self._nms_kind = "greedynms"
         self._num = 1
         self._obj_normalizer = 1.0
         self._scale_x_y = 1.0
@@ -47,6 +49,12 @@ class YoloLayer(BaseLayer):
     @property
     def anchors(self) -> tuple:
         return self._anchors
+
+    @property
+    def beta_nms(self) -> float:
+        if self._nms_kind == "greedynms":
+            return 0.6
+        return self._beta_nms
 
     @property
     def bflops(self) -> float:
@@ -96,6 +104,10 @@ class YoloLayer(BaseLayer):
         return self._max
 
     @property
+    def nms_kind(self) -> str:
+        return self._nms_kind
+
+    @property
     def obj_normalizer(self) -> float:
         return self._obj_normalizer
 
@@ -123,11 +135,13 @@ class YoloLayer(BaseLayer):
         if key in (
             "iou_loss",
             "iou_thresh_kind",
+            "nms_kind",
         ):
             self.__setattr__(f"_{key}", str(value))
         elif key in ("classes", "max", "num"):
             self.__setattr__(f"_{key}", int(value))
         elif key in (
+            "beta_nms",
             "cls_normalizer",
             "ignore_thresh",
             "iou_thresh",
