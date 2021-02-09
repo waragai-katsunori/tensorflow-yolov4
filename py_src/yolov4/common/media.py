@@ -110,33 +110,25 @@ def resize_image(
     return padded_image, ground_truth
 
 
-def draw_bboxes(image: np.ndarray, bboxes: np.ndarray, names: Dict[int, str]):
+def draw_bboxes(
+    image: np.ndarray, pred_bboxes: np.ndarray, names: Dict[int, str]
+):
     """
-    @parma image:  Dim(height, width, channel)
-    @param bboxes: (candidates, 4) or (candidates, 5)
-            [[center_x, center_y, w, h, class_id], ...]
-            [[center_x, center_y, w, h, class_id, propability], ...]
-    @param classes: {0: 'person', 1: 'bicycle', 2: 'car', ...}
+    @parma `image`:  Dim(height, width, channel)
+    @parma `pred_bboxes`
+        Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
 
     @return drawn_image
 
     Usage:
-        image = media.draw_bboxes(image, bboxes, classes)
+        image = yolo.draw_bboxes(image, bboxes)
     """
     image = np.copy(image)
     height, width, _ = image.shape
 
-    # Set propability
-    if bboxes.shape[-1] == 5:
-        bboxes = np.concatenate(
-            [bboxes, np.full((*bboxes.shape[:-1], 1), 2.0)], axis=-1
-        )
-    else:
-        bboxes = np.copy(bboxes)
-
-    # Convert ratio to length
-    bboxes[:, [0, 2]] = bboxes[:, [0, 2]] * width
-    bboxes[:, [1, 3]] = bboxes[:, [1, 3]] * height
+    bboxes = pred_bboxes * np.array(
+        [width, height, width, height, 1, 1, 1, 1, 1]
+    )
 
     # Draw bboxes
     for bbox in bboxes:
@@ -144,37 +136,64 @@ def draw_bboxes(image: np.ndarray, bboxes: np.ndarray, names: Dict[int, str]):
         c_y = int(bbox[1])
         half_w = int(bbox[2] / 2)
         half_h = int(bbox[3] / 2)
-        top_left = (c_x - half_w, c_y - half_h)
-        bottom_right = (c_x + half_w, c_y + half_h)
-        class_id = int(bbox[4])
-        bbox_color = BBOX_COLORS[class_id]
+
+        offset_x = min(10, half_w)
+        offset_y = min(10, half_h)
+
         font_size = 0.4
         font_thickness = 1
 
-        # Draw box
-        cv2.rectangle(image, top_left, bottom_right, bbox_color, 2)
+        for index in range(2):
+            cls_id = int(bbox[5 + 2 * index])
+            prob = bbox[6 + 2 * index]
+            color = BBOX_COLORS[cls_id]
 
-        # Draw text box
-        bbox_text = "{}: {:.1%}".format(names[class_id], bbox[5])
-        t_size = cv2.getTextSize(bbox_text, 0, font_size, font_thickness)[0]
-        cv2.rectangle(
-            image,
-            top_left,
-            (top_left[0] + t_size[0], top_left[1] - t_size[1] - 3),
-            bbox_color,
-            -1,
-        )
+            if prob > 0.24:
+                # Draw box
+                top = c_x - half_w + offset_y * index
+                if top < 0:
+                    top = 0
+                left = c_y - half_h + offset_x * index
+                if left < 0:
+                    left = 0
+                bottom = c_x + half_w
+                if bottom > height:
+                    bottom = height
+                right = c_y + half_h
+                if right > width:
+                    right = width
 
-        # Draw text
-        cv2.putText(
-            image,
-            bbox_text,
-            (top_left[0], top_left[1] - 2),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            font_size,
-            (255 - bbox_color[0], 255 - bbox_color[1], 255 - bbox_color[2]),
-            font_thickness,
-            lineType=cv2.LINE_AA,
-        )
+                top_left = (top, left)
+                bottom_right = (c_x + half_w, c_y + half_h)
+                cv2.rectangle(image, top_left, bottom_right, color, 2)
+
+                # Draw text box
+                bbox_text = "{}: {:.1%}".format(names[cls_id], prob)
+                t_size = cv2.getTextSize(
+                    bbox_text, 0, font_size, font_thickness
+                )[0]
+                cv2.rectangle(
+                    image,
+                    top_left,
+                    (top + t_size[0], left - t_size[1] - 3),
+                    color,
+                    -1,
+                )
+
+                # Draw text
+                cv2.putText(
+                    image,
+                    bbox_text,
+                    (top_left[0], top_left[1] - 2),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    font_size,
+                    (
+                        255 - color[0],
+                        255 - color[1],
+                        255 - color[2],
+                    ),
+                    font_thickness,
+                    lineType=cv2.LINE_AA,
+                )
 
     return image

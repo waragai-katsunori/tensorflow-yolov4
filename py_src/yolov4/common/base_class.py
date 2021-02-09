@@ -27,13 +27,47 @@ import time
 import cv2
 import numpy as np
 
-from . import media, predict
+from . import media
 from .config import YOLOConfig
+from ._common import (
+    fit_to_original as _fit_to_original,
+    yolo_diou_nms as _yolo_diou_nms,
+)
 
 
 class BaseClass:
     def __init__(self):
         self.config = YOLOConfig()
+
+    def yolo_diou_nms(self, candidates: np.ndarray) -> np.ndarray:
+        """
+        Warning!
+            - change order
+            - change c0 -> p(c0)
+
+        @param `candidates`: Dim(-1, 5 + len(classes))
+
+        @return `pred_bboxes`
+            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+        """
+        return _yolo_diou_nms(candidates, self.config.yolo_0.beta_nms)
+
+    def fit_to_original(
+        self, pred_bboxes: np.ndarray, origin_height: int, origin_width: int
+    ):
+        """
+        Warning! change pred_bboxes directly
+
+        @param `pred_bboxes`
+            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+        """
+        _fit_to_original(
+            pred_bboxes,
+            self.config.net.height,
+            self.config.net.width,
+            origin_height,
+            origin_width,
+        )
 
     def resize_image(self, image, ground_truth=None):
         """
@@ -53,61 +87,24 @@ class BaseClass:
             ground_truth=ground_truth,
         )
 
-    def candidates_to_pred_bboxes(
-        self,
-        candidates,
-        iou_threshold: float = 0.3,
-        score_threshold: float = 0.25,
-    ):
+    def draw_bboxes(self, image, pred_bboxes):
         """
-        @param candidates: Dim(-1, (x, y, w, h, conf, prob_0, prob_1, ...))
-
-        @return Dim(-1, (x, y, w, h, class_id, probability))
-        """
-        input_shape = self.config.net.input_shape
-        return predict.candidates_to_pred_bboxes(
-            candidates,
-            input_shape=input_shape,
-            iou_threshold=iou_threshold,
-            score_threshold=score_threshold,
-        )
-
-    def fit_pred_bboxes_to_original(self, pred_bboxes, original_shape):
-        """
-        @param pred_bboxes:    Dim(-1, (x, y, w, h, class_id, probability))
-        @param original_shape: (height, width, channels)
-        """
-        input_shape = self.config.net.input_shape
-        return predict.fit_pred_bboxes_to_original(
-            pred_bboxes,
-            input_shape=input_shape,
-            original_shape=original_shape,
-        )
-
-    def draw_bboxes(self, image, bboxes):
-        """
-        @parma image:  Dim(height, width, channel)
-        @param bboxes: (candidates, 4) or (candidates, 5)
-                [[center_x, center_y, w, h, class_id], ...]
-                [[center_x, center_y, w, h, class_id, propability], ...]
+        @parma `image`:  Dim(height, width, channel)
+        @parma `pred_bboxes`
+            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
 
         @return drawn_image
 
         Usage:
             image = yolo.draw_bboxes(image, bboxes)
         """
-        return media.draw_bboxes(image, bboxes, names=self.config.names)
+        return media.draw_bboxes(image, pred_bboxes, names=self.config.names)
 
     #############
     # Inference #
     #############
 
-    def predict(
-        self,
-        frame: np.ndarray,
-        iou_threshold: float = 0.3,
-        score_threshold: float = 0.25,
-    ):
+    def predict(self, frame: np.ndarray):
         # pylint: disable=unused-argument, no-self-use
         return [[0.0, 0.0, 0.0, 0.0, -1]]
 
@@ -119,8 +116,6 @@ class BaseClass:
         cv_frame_size: tuple = None,
         cv_fourcc: str = None,
         cv_waitKey_delay: int = 1,
-        iou_threshold: float = 0.3,
-        score_threshold: float = 0.25,
     ):
         if isinstance(media_path, str) and not path.exists(media_path):
             raise FileNotFoundError("{} does not exist".format(media_path))
@@ -132,11 +127,7 @@ class BaseClass:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             start_time = time.time()
-            bboxes = self.predict(
-                frame,
-                iou_threshold=iou_threshold,
-                score_threshold=score_threshold,
-            )
+            bboxes = self.predict(frame)
             exec_time = time.time() - start_time
             print("time: {:.2f} ms".format(exec_time * 1000))
 
@@ -170,11 +161,7 @@ class BaseClass:
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
                     predict_start_time = time.time()
-                    bboxes = self.predict(
-                        frame,
-                        iou_threshold=iou_threshold,
-                        score_threshold=score_threshold,
-                    )
+                    bboxes = self.predict(frame)
                     predict_exec_time = time.time() - predict_start_time
 
                     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)

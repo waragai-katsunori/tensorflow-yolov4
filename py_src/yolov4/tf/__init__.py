@@ -117,12 +117,7 @@ class YOLOv4(BaseClass):
 
         return K.concatenate(candidates, axis=1)
 
-    def predict(
-        self,
-        frame: np.ndarray,
-        iou_threshold: float = 0.3,
-        score_threshold: float = 0.25,
-    ):
+    def predict(self, frame: np.ndarray):
         """
         Predict one frame
 
@@ -131,19 +126,17 @@ class YOLOv4(BaseClass):
         @return pred_bboxes == Dim(-1, (x, y, w, h, class_id, probability))
         """
         # image_data == Dim(1, input_size[1], input_size[0], channels)
+        height, width, _ = frame.shape
+
         image_data = self.resize_image(frame)
         image_data = image_data / 255.0
         image_data = image_data[np.newaxis, ...].astype(np.float32)
 
-        candidates = self._predict(image_data)
+        candidates = self._predict(image_data)[0].numpy()
 
         # Select 0
-        pred_bboxes = self.candidates_to_pred_bboxes(
-            candidates[0].numpy(),
-            iou_threshold=iou_threshold,
-            score_threshold=score_threshold,
-        )
-        pred_bboxes = self.fit_pred_bboxes_to_original(pred_bboxes, frame.shape)
+        pred_bboxes = self.yolo_diou_nms(candidates)
+        self.fit_to_original(pred_bboxes, height, width)
         return pred_bboxes
 
     ############
