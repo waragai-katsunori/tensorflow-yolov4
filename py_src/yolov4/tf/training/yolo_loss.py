@@ -29,6 +29,12 @@ from .iou import bbox_iou, bbox_ciou, bbox_giou
 from ..model import YOLOv4Model
 from ...common.config import YOLOConfig
 
+_BBOX_XIOU_MAP = {
+    "iou": bbox_iou,
+    "ciou": bbox_ciou,
+    "giou": bbox_giou,
+}
+
 
 class YOLOv4Loss(Loss):
     def __init__(self, config: YOLOConfig, model: YOLOv4Model):
@@ -37,14 +43,11 @@ class YOLOv4Loss(Loss):
         for i in range(config.layer_count["yolo"]):
             self._metayolos.append(config.find_metalayer("yolo", i))
         self._metanet = config.net
-
         self.model = model
 
-        self._bbox_xiou = {
-            "iou": bbox_iou,
-            "ciou": bbox_ciou,
-            "giou": bbox_giou,
-        }
+        self._bbox_xiou = _BBOX_XIOU_MAP[self._metayolos[-1].iou_loss]
+        self._num_mask = len(self._metayolos[-1].mask)
+        self._stride = self._metayolos[-1].classes + 5
 
     def call(self, y_true, y_pred):
         """
@@ -55,100 +58,70 @@ class YOLOv4Loss(Loss):
         yolo_index = int(yolo_name.split("_")[-1])
         metayolo = self._metayolos[yolo_index]
 
-        bbox_xiou = self._bbox_xiou[metayolo.iou_loss]
-        classes = tf.constant(metayolo.classes)
-        cls_normalizer = tf.constant(metayolo.cls_normalizer)
-        iou_normalizer = tf.constant(metayolo.iou_normalizer)
-        mask = tf.convert_to_tensor(metayolo.mask)
-        obj_normalizer = tf.constant(metayolo.obj_normalizer)
+        cls_normalizer = metayolo.cls_normalizer
+        iou_normalizer = metayolo.iou_normalizer
+        obj_normalizer = metayolo.obj_normalizer
+        one_index = y_pred.shape[-1]
 
-        def batch_loop(batch, iou_loss0, obj_loss0, cls_loss0):
-            # y_pred0 == Dim(height, width, filters)
-            # y_true0 == Dim(height, width, filters + len(mask))
-            y_true0 = y_true[batch, ...]
-            y_pred0 = y_pred[batch, ...]
+        def anchor_loop(anchor, iou_loss0, obj_loss0, cls_loss0):
+            box_index = anchor * self._stride
+            obj_index = box_index + 4
+            cls_index = box_index + 5
+            next_box_index = box_index + self._stride
 
-            def anchor_loop(anchor, iou_loss1, obj_loss1, cls_loss1):
-                stride = 5 + classes
-                box_index = anchor * stride
-                obj_index = box_index + 4
-                cls_index = box_index + 5
-                next_box_index = box_index + stride
-                one_index = mask.shape[0] * stride + anchor
+            true_box = y_true[..., box_index:obj_index]
+            true_obj = y_true[..., obj_index]
+            true_cls = y_true[..., cls_index:next_box_index]
+            true_one = y_true[..., one_index + anchor]
 
-                true_box = y_true0[..., box_index:obj_index]
-                true_obj = y_true0[..., obj_index]
-                true_cls = y_true0[..., cls_index:next_box_index]
-                true_one = y_true0[..., one_index]
+            pred_box = y_pred[..., box_index:obj_index]
+            pred_obj = y_pred[..., obj_index]
+            pred_cls = y_pred[..., cls_index:next_box_index]
 
-                pred_box = y_pred0[..., box_index:obj_index]
-                pred_obj = y_pred0[..., obj_index]
-                pred_cls = y_pred0[..., cls_index:next_box_index]
+            # obj loss
+            obj_loss1 = obj_normalizer * K.sum(
+                K.binary_crossentropy(true_obj, pred_obj)
+            )
 
-                xious, ious = bbox_xiou(pred_box, true_box)
-
-                # xiou loss
-                iou_loss2 = iou_normalizer * K.sum(true_one * (1 - xious))
-
-                # metrics update
-                ious = true_one * ious
-                self.model._total_truth.assign_add(
-                    tf.cast(K.sum(true_one), dtype=tf.int64)
+            # cls loss
+            cls_loss1 = cls_normalizer * K.sum(
+                true_one
+                * K.sum(
+                    K.binary_crossentropy(true_cls, pred_cls),
+                    axis=-1,
                 )
-                self.model._ious.assign_add(K.sum(ious))
-                self.model._recall50.assign_add(
-                    K.sum(tf.cast(ious > 0.5, dtype=tf.int32))
-                )
-                self.model._recall75.assign_add(
-                    K.sum(tf.cast(ious > 0.75, dtype=tf.int32))
-                )
+            )
 
-                # obj loss
-                obj_loss2 = obj_normalizer * K.sum(
-                    K.binary_crossentropy(true_obj, pred_obj)
-                )
+            xious, ious = self._bbox_xiou(pred_box, true_box)
 
-                # cls loss
-                cls_loss2 = cls_normalizer * K.sum(
-                    true_one
-                    * K.sum(
-                        K.binary_crossentropy(true_cls, pred_cls),
-                        axis=-1,
-                    )
-                )
+            # xiou loss
+            iou_loss1 = iou_normalizer * K.sum(true_one * (1 - xious))
 
-                return (
-                    tf.add(anchor, 1),
-                    tf.add(iou_loss1, iou_loss2),
-                    tf.add(obj_loss1, obj_loss2),
-                    tf.add(cls_loss1, cls_loss2),
-                )
-
-            anchor0 = tf.constant(0)
-            iou_loss1 = tf.constant(0, dtype=tf.float32)
-            obj_loss1 = tf.constant(0, dtype=tf.float32)
-            cls_loss1 = tf.constant(0, dtype=tf.float32)
-            _, iou_loss1, obj_loss1, cls_loss1 = tf.while_loop(
-                cond=lambda batch, _, __, ___: tf.less(batch, mask.shape[0]),
-                body=anchor_loop,
-                loop_vars=[anchor0, iou_loss1, obj_loss1, cls_loss1],
+            # metrics update
+            ious = true_one * ious
+            self.model._ious.assign_add(K.sum(ious))
+            self.model._recall50.assign_add(
+                K.sum(tf.cast(ious > 0.5, dtype=tf.int32))
+            )
+            self.model._recall75.assign_add(
+                K.sum(tf.cast(ious > 0.75, dtype=tf.int32))
             )
 
             return (
-                tf.add(batch, 1),
+                tf.add(anchor, 1),
                 tf.add(iou_loss0, iou_loss1),
                 tf.add(obj_loss0, obj_loss1),
                 tf.add(cls_loss0, cls_loss1),
             )
 
-        batch0 = tf.constant(0)
-        iou_loss0 = tf.constant(0, dtype=tf.float32)
-        obj_loss0 = tf.constant(0, dtype=tf.float32)
-        cls_loss0 = tf.constant(0, dtype=tf.float32)
         _, iou_loss0, obj_loss0, cls_loss0 = tf.while_loop(
-            cond=lambda batch, _, __, ___: tf.less(batch, self._metanet.batch),
-            body=batch_loop,
-            loop_vars=[batch0, iou_loss0, obj_loss0, cls_loss0],
+            cond=lambda anchor, _, __, ___: tf.less(anchor, self._num_mask),
+            body=anchor_loop,
+            loop_vars=[0, 0.0, 0.0, 0.0],
+        )
+
+        self.model._total_truth.assign_add(
+            tf.cast(K.sum(y_true[..., one_index:]), dtype=tf.int64)
         )
 
         iou_loss0 /= self._metanet.batch
