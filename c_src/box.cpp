@@ -42,7 +42,7 @@ float get_diou(const xywh &a,
         iou = 0;
         if(out_w == 0 and out_h == 0) { return 0; }
     } else {
-        float in  = in_w * out_h;
+        float in  = in_w * in_h;
         float uni = a.w * a.h + b.w * b.h - in;
         iou       = in / uni;
     }
