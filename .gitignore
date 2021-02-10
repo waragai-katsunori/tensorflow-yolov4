@@ -10,3 +10,4 @@ tmp
 train*
 venv
 yolov4.egg-info
+*.zip
