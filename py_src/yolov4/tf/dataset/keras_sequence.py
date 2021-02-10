@@ -23,7 +23,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import random
 from typing import List
 
 import cv2
@@ -95,10 +94,7 @@ class YOLODataset(Sequence):
         label_true = 1
         for metayolo in self._metayolos:
             lh, lw, lc = metayolo.output_shape
-            # x, y, w, h, o, c0, c1, ...
-            # x, y, w, h, o, c0, c1, ...
-            # one
-            # one
+            # x, y, w, h, o, c0, c1, ..., one, one, ...
             gt_one = np.zeros((lh, lw, lc + len(metayolo.mask)))
 
             stride = 5 + metayolo.classes
@@ -242,7 +238,7 @@ class YOLODataset(Sequence):
 
         for i in range(self._augmentation_batch):
             augmentation = self._augmentation[
-                random.randrange(0, len(self._augmentation))
+                np.random.randint(0, len(self._augmentation))
             ]
 
             image = None
@@ -252,7 +248,7 @@ class YOLODataset(Sequence):
                     *[
                         self._get_dataset(
                             start_index
-                            + random.randrange(
+                            + np.random.randint(
                                 0,
                                 self._metanet.batch - self._augmentation_batch,
                             )
