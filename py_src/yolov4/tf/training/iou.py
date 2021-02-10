@@ -25,6 +25,7 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 
 
+@tf.function
 def bbox_iou(bboxes1, bboxes2):
     """
     @param bboxes1: (a, b, ..., 4)
@@ -36,26 +37,21 @@ def bbox_iou(bboxes1, bboxes2):
     ex) (4,):(3,4) -> (3,)
         (2,1,4):(2,3,4) -> (2,3)
     """
+    xy1 = bboxes1[..., :2]
+    wh_h1 = bboxes1[..., 2:4] * 0.5
+    xy2 = bboxes2[..., :2]
+    wh_h2 = bboxes2[..., 2:4] * 0.5
+
     bboxes1_area = bboxes1[..., 2] * bboxes1[..., 3]
     bboxes2_area = bboxes2[..., 2] * bboxes2[..., 3]
 
-    bboxes1_coor = K.concatenate(
-        [
-            bboxes1[..., :2] - bboxes1[..., 2:4] * 0.5,
-            bboxes1[..., :2] + bboxes1[..., 2:4] * 0.5,
-        ],
-        axis=-1,
-    )
-    bboxes2_coor = K.concatenate(
-        [
-            bboxes2[..., :2] - bboxes2[..., 2:4] * 0.5,
-            bboxes2[..., :2] + bboxes2[..., 2:4] * 0.5,
-        ],
-        axis=-1,
-    )
+    lu1 = xy1 - wh_h1
+    rd1 = xy1 + wh_h1
+    lu2 = xy2 - wh_h2
+    rd2 = xy2 + wh_h2
 
-    left_up = K.maximum(bboxes1_coor[..., :2], bboxes2_coor[..., :2])
-    right_down = K.minimum(bboxes1_coor[..., 2:], bboxes2_coor[..., 2:])
+    left_up = K.maximum(lu1, lu2)
+    right_down = K.minimum(rd1, rd2)
 
     inter_section = K.maximum(right_down - left_up, 0.0)
     inter_area = inter_section[..., 0] * inter_section[..., 1]
@@ -67,6 +63,7 @@ def bbox_iou(bboxes1, bboxes2):
     return iou, iou
 
 
+@tf.function
 def bbox_giou(bboxes1, bboxes2):
     """
     Generalized IoU
@@ -79,26 +76,21 @@ def bbox_giou(bboxes1, bboxes2):
     ex) (4,):(3,4) -> (3,)
         (2,1,4):(2,3,4) -> (2,3)
     """
+    xy1 = bboxes1[..., :2]
+    wh_h1 = bboxes1[..., 2:4] * 0.5
+    xy2 = bboxes2[..., :2]
+    wh_h2 = bboxes2[..., 2:4] * 0.5
+
     bboxes1_area = bboxes1[..., 2] * bboxes1[..., 3]
     bboxes2_area = bboxes2[..., 2] * bboxes2[..., 3]
 
-    bboxes1_coor = K.concatenate(
-        [
-            bboxes1[..., :2] - bboxes1[..., 2:4] * 0.5,
-            bboxes1[..., :2] + bboxes1[..., 2:4] * 0.5,
-        ],
-        axis=-1,
-    )
-    bboxes2_coor = K.concatenate(
-        [
-            bboxes2[..., :2] - bboxes2[..., 2:4] * 0.5,
-            bboxes2[..., :2] + bboxes2[..., 2:4] * 0.5,
-        ],
-        axis=-1,
-    )
+    lu1 = xy1 - wh_h1
+    rd1 = xy1 + wh_h1
+    lu2 = xy2 - wh_h2
+    rd2 = xy2 + wh_h2
 
-    left_up = K.maximum(bboxes1_coor[..., :2], bboxes2_coor[..., :2])
-    right_down = K.minimum(bboxes1_coor[..., 2:], bboxes2_coor[..., 2:])
+    left_up = K.maximum(lu1, lu2)
+    right_down = K.minimum(rd1, rd2)
 
     inter_section = K.maximum(right_down - left_up, 0.0)
     inter_area = inter_section[..., 0] * inter_section[..., 1]
@@ -107,8 +99,8 @@ def bbox_giou(bboxes1, bboxes2):
 
     iou = inter_area / (union_area + K.epsilon())
 
-    enclose_left_up = K.minimum(bboxes1_coor[..., :2], bboxes2_coor[..., :2])
-    enclose_right_down = K.maximum(bboxes1_coor[..., 2:], bboxes2_coor[..., 2:])
+    enclose_left_up = K.minimum(lu1, lu2)
+    enclose_right_down = K.maximum(rd1, rd2)
 
     enclose_section = enclose_right_down - enclose_left_up
     enclose_area = enclose_section[..., 0] * enclose_section[..., 1]
@@ -118,6 +110,7 @@ def bbox_giou(bboxes1, bboxes2):
     return giou, iou
 
 
+@tf.function
 def bbox_ciou(bboxes1, bboxes2):
     """
     Complete IoU
@@ -130,26 +123,21 @@ def bbox_ciou(bboxes1, bboxes2):
     ex) (4,):(3,4) -> (3,)
         (2,1,4):(2,3,4) -> (2,3)
     """
+    xy1 = bboxes1[..., :2]
+    wh_h1 = bboxes1[..., 2:4] * 0.5
+    xy2 = bboxes2[..., :2]
+    wh_h2 = bboxes2[..., 2:4] * 0.5
+
     bboxes1_area = bboxes1[..., 2] * bboxes1[..., 3]
     bboxes2_area = bboxes2[..., 2] * bboxes2[..., 3]
 
-    bboxes1_coor = K.concatenate(
-        [
-            bboxes1[..., :2] - bboxes1[..., 2:4] * 0.5,
-            bboxes1[..., :2] + bboxes1[..., 2:4] * 0.5,
-        ],
-        axis=-1,
-    )
-    bboxes2_coor = K.concatenate(
-        [
-            bboxes2[..., :2] - bboxes2[..., 2:4] * 0.5,
-            bboxes2[..., :2] + bboxes2[..., 2:4] * 0.5,
-        ],
-        axis=-1,
-    )
+    lu1 = xy1 - wh_h1
+    rd1 = xy1 + wh_h1
+    lu2 = xy2 - wh_h2
+    rd2 = xy2 + wh_h2
 
-    left_up = K.maximum(bboxes1_coor[..., :2], bboxes2_coor[..., :2])
-    right_down = K.minimum(bboxes1_coor[..., 2:], bboxes2_coor[..., 2:])
+    left_up = K.maximum(lu1, lu2)
+    right_down = K.minimum(rd1, rd2)
 
     inter_section = K.maximum(right_down - left_up, 0.0)
     inter_area = inter_section[..., 0] * inter_section[..., 1]
@@ -158,27 +146,29 @@ def bbox_ciou(bboxes1, bboxes2):
 
     iou = inter_area / (union_area + K.epsilon())
 
-    enclose_left_up = K.minimum(bboxes1_coor[..., :2], bboxes2_coor[..., :2])
-    enclose_right_down = K.maximum(bboxes1_coor[..., 2:], bboxes2_coor[..., 2:])
+    enclose_left_up = K.minimum(lu1, lu2)
+    enclose_right_down = K.maximum(rd1, rd2)
 
     enclose_section = enclose_right_down - enclose_left_up
 
-    c_2 = enclose_section[..., 0] ** 2 + enclose_section[..., 1] ** 2
+    c_2 = K.pow(enclose_section[..., 0], 2) + K.pow(enclose_section[..., 1], 2)
 
-    center_diagonal = bboxes2[..., :2] - bboxes1[..., :2]
+    center_diagonal = xy2 - xy1
 
-    rho_2 = center_diagonal[..., 0] ** 2 + center_diagonal[..., 1] ** 2
+    rho_2 = K.pow(center_diagonal[..., 0], 2) + K.pow(
+        center_diagonal[..., 1], 2
+    )
 
     diou = iou - rho_2 / (c_2 + K.epsilon())
 
-    v = (
+    v = K.pow(
         (
             tf.math.atan(bboxes1[..., 2] / (bboxes1[..., 3] + K.epsilon()))
             - tf.math.atan(bboxes2[..., 2] / (bboxes2[..., 3] + K.epsilon()))
         )
-        * 2
-        / 3.1415926536
-    ) ** 2
+        * 0.636619772,  # 2/pi
+        2,
+    )
 
     alpha = v / (1 - iou + v + K.epsilon())
 

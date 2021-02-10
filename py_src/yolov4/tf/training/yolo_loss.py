@@ -46,8 +46,51 @@ class YOLOv4Loss(Loss):
         self.model = model
 
         self._bbox_xiou = _BBOX_XIOU_MAP[self._metayolos[-1].iou_loss]
-        self._num_mask = len(self._metayolos[-1].mask)
-        self._stride = self._metayolos[-1].classes + 5
+        self._num_mask = tf.constant(
+            len(self._metayolos[-1].mask), dtype=tf.int32
+        )
+
+        # yolo #################################################################
+
+        self._iou_norm = tf.constant(
+            [metayolo.iou_normalizer for metayolo in self._metayolos],
+            dtype=tf.float32,
+        )
+        self._cls_norm = tf.constant(
+            [metayolo.cls_normalizer for metayolo in self._metayolos],
+            dtype=tf.float32,
+        )
+        self._obj_norm = tf.constant(
+            [metayolo.obj_normalizer for metayolo in self._metayolos],
+            dtype=tf.float32,
+        )
+
+        # anchor ###############################################################
+
+        stride = self._metayolos[-1].classes + 5
+        self._box_index = tf.constant(
+            [stride * i for i in range(len(self._metayolos[-1].mask))],
+            dtype=tf.int32,
+        )
+        self._obj_index = tf.constant(
+            [stride * i + 4 for i in range(len(self._metayolos[-1].mask))],
+            dtype=tf.int32,
+        )
+        self._cls_index = tf.constant(
+            [stride * i + 5 for i in range(len(self._metayolos[-1].mask))],
+            dtype=tf.int32,
+        )
+        self._next_box_index = tf.constant(
+            [stride * (i + 1) for i in range(len(self._metayolos[-1].mask))],
+            dtype=tf.int32,
+        )
+        self._one_index = tf.constant(
+            [
+                self._metayolos[-1].channels + i
+                for i in range(len(self._metayolos[-1].mask))
+            ],
+            dtype=tf.int32,
+        )
 
     def call(self, y_true, y_pred):
         """
@@ -56,35 +99,32 @@ class YOLOv4Loss(Loss):
         """
         yolo_name = y_pred.name.split("/")[-2]
         yolo_index = int(yolo_name.split("_")[-1])
-        metayolo = self._metayolos[yolo_index]
-
-        cls_normalizer = metayolo.cls_normalizer
-        iou_normalizer = metayolo.iou_normalizer
-        obj_normalizer = metayolo.obj_normalizer
-        one_index = y_pred.shape[-1]
 
         def anchor_loop(anchor, iou_loss0, obj_loss0, cls_loss0):
-            box_index = anchor * self._stride
-            obj_index = box_index + 4
-            cls_index = box_index + 5
-            next_box_index = box_index + self._stride
+            true_box = y_true[
+                ..., self._box_index[anchor] : self._obj_index[anchor]
+            ]
+            true_obj = y_true[..., self._obj_index[anchor]]
+            true_cls = y_true[
+                ..., self._cls_index[anchor] : self._next_box_index[anchor]
+            ]
+            true_one = y_true[..., self._one_index[anchor]]
 
-            true_box = y_true[..., box_index:obj_index]
-            true_obj = y_true[..., obj_index]
-            true_cls = y_true[..., cls_index:next_box_index]
-            true_one = y_true[..., one_index + anchor]
-
-            pred_box = y_pred[..., box_index:obj_index]
-            pred_obj = y_pred[..., obj_index]
-            pred_cls = y_pred[..., cls_index:next_box_index]
+            pred_box = y_pred[
+                ..., self._box_index[anchor] : self._obj_index[anchor]
+            ]
+            pred_obj = y_pred[..., self._obj_index[anchor]]
+            pred_cls = y_pred[
+                ..., self._cls_index[anchor] : self._next_box_index[anchor]
+            ]
 
             # obj loss
-            obj_loss1 = obj_normalizer * K.sum(
+            obj_loss1 = self._obj_norm[yolo_index] * K.sum(
                 K.binary_crossentropy(true_obj, pred_obj)
             )
 
             # cls loss
-            cls_loss1 = cls_normalizer * K.sum(
+            cls_loss1 = self._cls_norm[yolo_index] * K.sum(
                 true_one
                 * K.sum(
                     K.binary_crossentropy(true_cls, pred_cls),
@@ -95,7 +135,9 @@ class YOLOv4Loss(Loss):
             xious, ious = self._bbox_xiou(pred_box, true_box)
 
             # xiou loss
-            iou_loss1 = iou_normalizer * K.sum(true_one * (1 - xious))
+            iou_loss1 = self._iou_norm[yolo_index] * K.sum(
+                true_one * (1 - xious)
+            )
 
             # metrics update
             ious = true_one * ious
@@ -121,7 +163,7 @@ class YOLOv4Loss(Loss):
         )
 
         self.model._total_truth.assign_add(
-            tf.cast(K.sum(y_true[..., one_index:]), dtype=tf.int64)
+            tf.cast(K.sum(y_true[..., self._one_index[0] :]), dtype=tf.int64)
         )
 
         iou_loss0 /= self._metanet.batch
