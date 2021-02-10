@@ -27,7 +27,7 @@ import tensorflow.keras.backend as K
 from tensorflow.keras.layers import Input
 from tensorflow.keras.optimizers import Adam
 
-from .dataset.keras_sequence import YOLODataset
+from .dataset.keras_sequence import YOLODataset  # for exporting
 from .model import YOLOv4Model
 from .training.callbacks import (
     SaveWeightsCallback,  # for exporting
