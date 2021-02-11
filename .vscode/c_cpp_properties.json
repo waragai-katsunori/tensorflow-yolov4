@@ -1,0 +1,19 @@
+{
+  "configurations": [
+    {
+      "name": "pybind11",
+      "includePath": ["${workspaceFolder}/**"],
+      "cStandard": "c11",
+      "cppStandard": "c++14",
+      "browse": {
+        "path": [
+          "${workspaceFolder}/c_src",
+          "${workspaceFolder}/venv/lib/python3.7/site-packages/pybind11/include",
+          "${workspaceFolder}/venv/lib/python3.8/site-packages/pybind11/include"
+        ],
+        "limitSymbolsToIncludedHeaders": true
+      }
+    }
+  ],
+  "version": 4
+}
