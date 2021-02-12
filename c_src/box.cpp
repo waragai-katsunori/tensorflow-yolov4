@@ -84,6 +84,26 @@ void get_in_out_lrtb(const lrtb &a, const lrtb &b, lrtb &in, lrtb &out) {
     }
 }
 
+float get_iou(const xywh &a, const xywh &b) {
+    lrtb a_lrtb = get_lrtb(a);
+    lrtb b_lrtb = get_lrtb(b);
+    lrtb in_lrtb;
+
+    in_lrtb.l  = a_lrtb.l > b_lrtb.l ? a_lrtb.l : b_lrtb.l;
+    in_lrtb.r  = a_lrtb.r < b_lrtb.r ? a_lrtb.r : b_lrtb.r;
+    float in_w = in_lrtb.r - in_lrtb.l;
+    if(in_w <= 0) { return 0; }
+
+    in_lrtb.t  = a_lrtb.t > b_lrtb.t ? a_lrtb.t : b_lrtb.t;
+    in_lrtb.b  = a_lrtb.b < b_lrtb.b ? a_lrtb.b : b_lrtb.b;
+    float in_h = in_lrtb.b - in_lrtb.t;
+    if(in_h <= 0) { return 0; }
+
+    float in  = in_w * in_h;
+    float uni = a.w * a.h + b.w * b.h - in;
+    return in / uni;
+}
+
 lrtb get_lrtb(const xywh &a) {
     float w_2 = a.w / 2;
     float h_2 = a.h / 2;

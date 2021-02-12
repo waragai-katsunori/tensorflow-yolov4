@@ -46,4 +46,6 @@ float get_diou(const xywh &a_xywh,
 
 void get_in_out_lrtb(const lrtb &a, const lrtb &b, lrtb &in, lrtb &out);
 
+float get_iou(const xywh &a, const xywh &b);
+
 lrtb get_lrtb(const xywh &a);
