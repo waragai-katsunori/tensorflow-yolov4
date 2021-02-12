@@ -28,6 +28,10 @@
 
 namespace py = pybind11;
 
+py::list convert_dataset_to_ground_truth(py::array_t<float> &dataset,
+                                         py::array_t<float> &metayolos,
+                                         py::array_t<float> &anchors);
+
 void fit_to_original(py::array_t<float> &pred_bboxes,
                      const int           in_height,
                      const int           in_width,

@@ -26,6 +26,12 @@
 namespace py = pybind11;
 
 PYBIND11_MODULE(_common, m) {
+    m.def("convert_dataset_to_ground_truth",
+          &convert_dataset_to_ground_truth,
+          py::arg("dataset").noconvert(),
+          py::arg("metayolos").noconvert(),
+          py::arg("anchors").noconvert());
+
     m.def("fit_to_original",
           &fit_to_original,
           py::arg("pred_bboxes").noconvert(),

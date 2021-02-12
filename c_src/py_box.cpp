@@ -25,7 +25,183 @@
 
 #include "box.h"
 
+#include <cmath>
 #include <iostream>
+
+/**
+ * @param dataset {{x, y, w, h, cls_id}, ...}
+ * @param metayolos {{h, w, c, classes, label_smooth_eps, max, iou_thresh,
+ *          mask0, ...}}
+ * @param anchors {w0, h0, w1, h1, ...} 0 ~ 1
+ *
+ * @return {Dim(h,w,c+num_masks), ...}
+ */
+py::list convert_dataset_to_ground_truth(py::array_t<float> &dataset,
+                                         py::array_t<float> &metayolos,
+                                         py::array_t<float> &anchors) {
+    py::list               y_true;
+    std::array<float *, 3> gt_one_ptr_v;
+
+    auto   _dataset    = dataset.mutable_unchecked<2>();
+    float *dataset_ptr = _dataset.mutable_data(0, 0);
+
+    auto  _metayolos       = metayolos.mutable_unchecked<2>();
+    int   num_yolos        = _metayolos.shape(0);
+    int   channels         = static_cast<int>(_metayolos(num_yolos - 1, 2));
+    int   classes          = static_cast<int>(_metayolos(num_yolos - 1, 3));
+    float label_smooth_eps = _metayolos(num_yolos - 1, 4);
+    int   num_dataset = fmin(static_cast<int>(_metayolos(num_yolos - 1, 5)),
+                           _dataset.shape(0));
+    float iou_thresh  = _metayolos(num_yolos - 1, 6);
+
+    int box_size  = 5 + classes;
+    int num_masks = channels / box_size;
+
+    std::array<int, 3>                height_v;
+    std::array<int, 3>                width_v;
+    std::array<std::array<int, 3>, 3> mask_v;
+    for(int y = 0; y < num_yolos; y++) {
+        height_v[y] = static_cast<int>(_metayolos(y, 0));
+        width_v[y]  = static_cast<int>(_metayolos(y, 1));
+        for(int n = 0; n < num_masks; n++) {
+            mask_v[y][n] = static_cast<int>(_metayolos(y, 7 + n));
+        }
+    }
+
+    float label_true;
+    float label_false;
+    if(label_smooth_eps > 0.0) {
+        label_true  = 1 - 0.5 * label_smooth_eps;
+        label_false = 0.5 * label_smooth_eps;
+    } else {
+        label_true  = 1;
+        label_false = 0;
+    }
+
+    auto                 _anchors    = anchors.mutable_unchecked<1>();
+    float *              anchors_ptr = _anchors.mutable_data(0);
+    int                  num_anchors = _anchors.shape(0) / 2;
+    std::array<bool, 15> use_anchor_v;
+
+    for(int y = 0; y < num_yolos; y++) {
+        int height = height_v[y];
+        int width  = width_v[y];
+
+        py::array_t<float> gt_one({height, width, channels + num_masks});
+        y_true.append(gt_one);
+        float *gt_one_ptr = gt_one.mutable_data(0, 0, 0);
+        gt_one_ptr_v[y]   = gt_one_ptr;
+
+        for(int j = 0; j < height; j++) {
+            for(int i = 0; i < width; i++) {
+                int stride = (j * width + i) * (channels + 3);
+                for(int n = 0; n < num_masks; n++) {
+                    int box_index      = n * box_size + stride;
+                    int obj_index      = box_index + 4;
+                    int cls_index      = box_index + 5;
+                    int next_box_index = box_index + box_size;
+
+                    // x, y, w, h
+                    gt_one_ptr[box_index]     = 0;
+                    gt_one_ptr[box_index + 1] = 0;
+                    gt_one_ptr[box_index + 2] = 0;
+                    gt_one_ptr[box_index + 3] = 0;
+                    // o
+                    gt_one_ptr[obj_index] = 0;
+                    // c0, c1, ...
+                    for(int k = cls_index; k < next_box_index; k++) {
+                        gt_one_ptr[k] = label_false;
+                    }
+
+                    gt_one_ptr[stride + channels + n] = 0;
+                }
+            }
+        }
+    }
+
+    for(int t = 0; t < num_dataset; t++) {
+        xywh &truth  = *reinterpret_cast<xywh *>(&dataset_ptr[5 * t]);
+        int   cls_id = static_cast<int>(dataset_ptr[5 * t + 4]);
+        xywh  truth_shift {.x = 0, .y = 0, .w = truth.w, .h = truth.h};
+
+        // Find best anchor
+        float best_iou = 0;
+        int   best_n   = 0;
+        for(int n = 0; n < num_anchors; n++) {
+            xywh  anchor {.x = 0,
+                         .y = 0,
+                         .w = anchors_ptr[2 * n],
+                         .h = anchors_ptr[2 * n + 1]};
+            float iou = get_iou(truth_shift, anchor);
+
+            if(iou > best_iou) {
+                best_iou = iou;
+                best_n   = n;
+            }
+            // Find over iou_thresh
+            use_anchor_v[n] = iou > iou_thresh;
+        }
+        use_anchor_v[best_n] = true;
+
+        for(int y = 0; y < num_yolos; y++) {
+            int    i          = truth.x * width_v[y];
+            int    j          = truth.y * height_v[y];
+            float *gt_one_ptr = gt_one_ptr_v[y];
+            int    stride     = (j * width_v[y] + i) * (channels + 3);
+
+            for(int n = 0; n < num_masks; n++) {
+                if(use_anchor_v[mask_v[y][n]]) {
+                    int box_index = n * box_size + stride;
+                    int obj_index = box_index + 4;
+                    int cls_index = box_index + 5;
+
+                    // x, y, w, h
+                    gt_one_ptr[box_index] += truth.x;
+                    gt_one_ptr[box_index + 1] += truth.y;
+                    gt_one_ptr[box_index + 2] += truth.w;
+                    gt_one_ptr[box_index + 3] += truth.h;
+                    // o
+                    gt_one_ptr[obj_index] += 1;
+                    // c0, c1, ...
+                    gt_one_ptr[cls_index + cls_id] = label_true;
+
+                    gt_one_ptr[stride + channels + n] += 1;
+                }
+            }
+        }
+    }
+
+    // Calculate average box
+    for(int y = 0; y < num_yolos; y++) {
+        int    height     = height_v[y];
+        int    width      = width_v[y];
+        float *gt_one_ptr = gt_one_ptr_v[y];
+        for(int j = 0; j < height; j++) {
+            for(int i = 0; i < width; i++) {
+                int stride = (j * width + i) * (channels + 3);
+                for(int n = 0; n < num_masks; n++) {
+                    float num_box = gt_one_ptr[stride + channels + n];
+                    if(num_box > 1) {
+                        int box_index = n * box_size + stride;
+                        int obj_index = box_index + 4;
+
+                        // x, y, w, h
+                        gt_one_ptr[box_index] /= num_box;
+                        gt_one_ptr[box_index + 1] /= num_box;
+                        gt_one_ptr[box_index + 2] /= num_box;
+                        gt_one_ptr[box_index + 3] /= num_box;
+                        // o
+                        gt_one_ptr[obj_index] /= num_box;
+                        // one
+                        gt_one_ptr[stride + channels + n] = 1;
+                    }
+                }
+            }
+        }
+    }
+
+    return y_true;
+}
 
 void fit_to_original(py::array_t<float> &pred_bboxes,
                      const int           in_height,

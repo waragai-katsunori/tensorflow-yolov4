@@ -21,8 +21,18 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+from typing import List
 
+import numpy as np
+
+def convert_dataset_to_ground_truth(
+    dataset: np.ndarray, metayolos: np.ndarray, anchors: np.ndarray
+) -> List[np.ndarray]: ...
 def fit_to_original(
-    pred_bboxes, in_height: int, in_width: int, out_height: int, out_width: int
+    pred_bboxes: np.ndarray,
+    in_height: int,
+    in_width: int,
+    out_height: int,
+    out_width: int,
 ): ...
-def yolo_diou_nms(candidates, beta1: float) -> int: ...
+def yolo_diou_nms(candidates: np.ndarray, beta1: float) -> int: ...
