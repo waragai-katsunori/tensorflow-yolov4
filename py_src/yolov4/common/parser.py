@@ -171,7 +171,7 @@ def parse_dataset(
                 if image_path_prefix != "":
                     image_path = path.join(image_path_prefix, image_path)
 
-                xywhc_s = np.zeros((len(bboxes) - 1, 5))
+                xywhc_s = np.zeros((len(bboxes) - 1, 5), dtype=np.float32)
                 for i, bbox in enumerate(bboxes[1:]):
                     # bbox = class_id,x,y,w,h
                     bbox = list(map(float, bbox.split(",")))
@@ -192,7 +192,7 @@ def parse_dataset(
                 root, _ = path.splitext(image_path)
                 with open(root + ".txt") as fd2:
                     bboxes = fd2.readlines()
-                    xywhc_s = np.zeros((len(bboxes), 5))
+                    xywhc_s = np.zeros((len(bboxes), 5), dtype=np.float32)
                     for i, bbox in enumerate(bboxes):
                         # bbox = class_id x y w h
                         bbox = bbox.strip()
