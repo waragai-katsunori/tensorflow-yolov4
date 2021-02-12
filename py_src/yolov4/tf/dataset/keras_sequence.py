@@ -27,13 +27,13 @@ from typing import List
 
 import cv2
 import numpy as np
-import tensorflow as tf
-import tensorflow.keras.backend as K
 from tensorflow.keras.utils import Sequence
 
 from .augmentation import mosaic
-from ..training.iou import bbox_iou
-from ...common import media
+from ...common import (
+    media,
+    convert_dataset_to_ground_truth as _convert_dataset_to_ground_truth,
+)
 from ...common.config import YOLOConfig
 from ...common.parser import parse_dataset
 
@@ -56,18 +56,27 @@ class YOLODataset(Sequence):
         for i in range(config.layer_count["yolo"]):
             self._metayolos.append(config.find_metalayer("yolo", i))
         self._metanet = config.net
+        self._metayolos_np = np.zeros(
+            (len(self._metayolos), 7 + len(self._metayolos[-1].mask)),
+            dtype=np.float32,
+        )
+        for i, metayolo in enumerate(self._metayolos):
+            self._metayolos_np[i, 0] = metayolo.height
+            self._metayolos_np[i, 1] = metayolo.width
+            self._metayolos_np[i, 2] = metayolo.channels
+            self._metayolos_np[i, 3] = metayolo.classes
+            self._metayolos_np[i, 4] = metayolo.label_smooth_eps
+            self._metayolos_np[i, 5] = metayolo.max
+            self._metayolos_np[i, 6] = metayolo.iou_thresh
+            for j, mask in enumerate(metayolo.mask):
+                self._metayolos_np[i, 7 + j] = mask
 
-        _anchors = []
-        for anchor in self._metayolos[-1].anchors:
-            _anchors.append(
-                [
-                    0,
-                    0,
-                    anchor[0] / self._metanet.width,
-                    anchor[1] / self._metanet.height,
-                ]
-            )
-        self._anchors = tf.convert_to_tensor(_anchors)
+        self._anchors_np = np.zeros(
+            len(self._metayolos[-1].anchors) * 2, dtype=np.float32
+        )
+        for i, anchor in enumerate(self._metayolos[-1].anchors):
+            self._anchors_np[2 * i] = anchor[0] / self._metanet.width
+            self._anchors_np[2 * i + 1] = anchor[1] / self._metanet.height
 
         # Data augmentation ####################################################
 
@@ -82,100 +91,16 @@ class YOLODataset(Sequence):
             self._augmentation_batch = 0
             self._training = False
 
-    def _convert_bboxes_to_ground_truth(self, bboxes):
+    def _convert_dataset_to_ground_truth(self, dataset_bboxes):
         """
-        @param `bboxes`: [[b_x, b_y, b_w, b_h, class_id], ...]
+        @param `dataset_bboxes`: [[b_x, b_y, b_w, b_h, class_id], ...]
 
         @return `groud_truth_one`:
             [Dim(yolo.h, yolo.w, yolo.c + len(mask))] * len(yolo)
         """
-        y_true = []
-        nums = []
-        label_true = 1
-        for metayolo in self._metayolos:
-            lh, lw, lc = metayolo.output_shape
-            # x, y, w, h, o, c0, c1, ..., one, one, ...
-            gt_one = np.zeros((lh, lw, lc + len(metayolo.mask)))
-
-            stride = 5 + metayolo.classes
-            for n in range(len(metayolo.mask)):
-                box_index = n * stride
-                cls_index = box_index + 5
-                next_box_index = box_index + stride
-
-                if metayolo.label_smooth_eps > 0.0:
-                    label_true = 1 - 0.5 * metayolo.label_smooth_eps
-                    gt_one[..., cls_index:next_box_index] = (
-                        0.5 * metayolo.label_smooth_eps
-                    )
-
-            nums.append(np.full((lh, lw, len(metayolo.mask)), np.inf))
-            y_true.append(gt_one)
-
-        for t in range(min(self._metayolos[-1].max, len(bboxes))):
-            truth = bboxes[t][:4]
-            cls_id = int(bboxes[t][4])
-            truth_shift = tf.convert_to_tensor([0, 0, truth[2], truth[3]])
-            ious = []
-
-            # Find best Anchor
-            ious, _ = bbox_iou(truth_shift, self._anchors)
-            best_n = K.argmax(ious)
-
-            # Find over iou_thresh
-            masks = []
-            iou_thresh = self._metayolos[-1].iou_thresh
-            if iou_thresh < 1.0:
-                for n, iou in enumerate(ious):
-                    # TODO: box_iou_kind
-                    if iou > iou_thresh and n != best_n:
-                        masks.append(n)
-
-            masks.append(best_n)
-
-            for metayolo, gt_one, num in zip(self._metayolos, y_true, nums):
-                l_h, l_w, l_c = metayolo.output_shape
-
-                i = int(truth[0] * l_w)
-                j = int(truth[1] * l_h)
-                stride = 5 + metayolo.classes
-
-                # Get mask for metayolo
-                y_mask = []
-                for mask in masks:
-                    if mask in metayolo.mask:
-                        y_mask.append(mask)
-
-                for n, mask in enumerate(metayolo.mask):
-                    if mask in y_mask:
-                        box_index = n * stride
-                        obj_index = box_index + 4
-                        cls_index = box_index + 5
-
-                        # Accumulate box and obj
-                        gt_one[j, i, box_index:obj_index] += truth
-                        gt_one[j, i, obj_index] = 1
-                        gt_one[j, i, cls_index + cls_id] = label_true
-                        if num[j, i, n] > 1e3:
-                            num[j, i, n] = 1
-                        else:
-                            num[j, i, n] += 1
-
-        # Calculate average box
-        for metayolo, gt_one, num in zip(self._metayolos, y_true, nums):
-            l_c = metayolo.output_shape[-1]
-            stride = 5 + metayolo.classes
-
-            for n in range(len(metayolo.mask)):
-                box_index = n * stride
-                obj_index = box_index + 4
-                one_index = l_c + n
-                gt_one[..., box_index:obj_index] /= num[..., n : n + 1]
-                gt_one[..., one_index] = gt_one[..., obj_index]
-
-        # TODO: test code
-
-        return y_true
+        return _convert_dataset_to_ground_truth(
+            dataset_bboxes, self._metayolos_np, self._anchors_np
+        )
 
     def _convert_dataset_to_image_and_bboxes(self, dataset):
         """
@@ -232,7 +157,7 @@ class YOLODataset(Sequence):
             image, bboxes = self._get_dataset(start_index + i)
 
             batch_x.append(image)
-            ground_truth = self._convert_bboxes_to_ground_truth(bboxes)
+            ground_truth = self._convert_dataset_to_ground_truth(bboxes)
             for j in range(len(self._metayolos)):
                 batch_y[j].append(ground_truth[j])
 
@@ -257,7 +182,7 @@ class YOLODataset(Sequence):
                     ]
                 )
 
-            ground_truth = self._convert_bboxes_to_ground_truth(bboxes)
+            ground_truth = self._convert_dataset_to_ground_truth(bboxes)
             for j in range(len(self._metayolos)):
                 batch_y[j].append(ground_truth[j])
 
