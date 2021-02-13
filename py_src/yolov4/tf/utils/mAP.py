@@ -69,6 +69,9 @@ def create_mAP_input_files(
     if num_sample is None:
         num_sample = max_dataset_size
 
+    if num_sample > max_dataset_size:
+        num_sample = max_dataset_size
+
     for i in range(num_sample):
         # image_path, [[x, y, w, h, class_id], ...]
         image_path, gt_bboxes = dataset.dataset[i % max_dataset_size].copy()
@@ -101,9 +104,11 @@ def create_mAP_input_files(
                     )
                 )
 
+        # predict
         pred_bboxes = yolo.predict(image)
+        # Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
         pred_bboxes = pred_bboxes * np.array(
-            [width, height, width, height, 1, 1]
+            [width, height, width, height, 1, 1, 1, 1, 1]
         )
 
         # detection-results
@@ -113,8 +118,10 @@ def create_mAP_input_files(
         ) as fd:
             for xywhcp in pred_bboxes:
                 # name confidence left top right bottom
-                class_name = yolo.config.names[int(xywhcp[4])].replace(" ", "_")
-                probability = xywhcp[5]
+                class_name = yolo.config.names[int(xywhcp[5])].replace(" ", "_")
+                probability = xywhcp[6]
+                if probability < 0.01:
+                    continue
                 left = int(xywhcp[0] - xywhcp[2] / 2)
                 top = int(xywhcp[1] - xywhcp[3] / 2)
                 right = int(xywhcp[0] + xywhcp[2] / 2)
