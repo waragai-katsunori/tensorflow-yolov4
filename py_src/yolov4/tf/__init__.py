@@ -106,10 +106,9 @@ class YOLOv4(BaseClass):
         batch = yolos[0].shape[0]
 
         candidates = []
-        for i in range(self.config.layer_count["yolo"]):
-            metayolo = self.config.find_metalayer("yolo", i)
-            stride = 5 + metayolo.classes
-            candidates.append(K.reshape(yolos[i], shape=(batch, -1, stride)))
+        stride = 5 + self.config.yolo_0.classes
+        for yolo in yolos:
+            candidates.append(K.reshape(yolo, shape=(batch, -1, stride)))
 
         return K.concatenate(candidates, axis=1)
 
