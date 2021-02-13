@@ -111,7 +111,9 @@ class YOLOCallbackAtEachStep(Callback):
         tf.summary.scalar(name="recall75", data=recall75_f, step=step)
 
         if self._verbose == 3:
-            verbose = f"step: {step.numpy()}, "
+            verbose = (
+                f"step: {step.numpy()}({step.numpy()/self._cfg_max_step:.1%}), "
+            )
             verbose += f"{time.time()-self.start_time:6.2f}s, "
             verbose += f"Truth: {truth.numpy():4}, "
             verbose += f"Avg IOU: {iou.numpy():5.3f}, "
