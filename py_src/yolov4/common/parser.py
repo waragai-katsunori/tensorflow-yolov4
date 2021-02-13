@@ -36,6 +36,7 @@ from .metalayer import (
     ShortcutLayer,
     UpsampleLayer,
     YoloLayer,
+    YoloTpuLayer,
 )
 
 
@@ -58,6 +59,7 @@ def parse_cfg(
         "total": -1,
         "upsample": 0,
         "yolo": 0,
+        "yolo_tpu": 0,
     }
     layer_type: str = "net"
 
@@ -69,6 +71,7 @@ def parse_cfg(
         "shortcut": ShortcutLayer,
         "upsample": UpsampleLayer,
         "yolo": YoloLayer,
+        "yolo_tpu": YoloTpuLayer,
     }
 
     with open(cfg_path, "r") as fd:

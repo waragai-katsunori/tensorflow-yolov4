@@ -121,7 +121,7 @@ class YoloLayer(BaseLayer):
 
     def __repr__(self) -> str:
         rep = f"{self.index:4}  "
-        rep += f"{self.type}__"
+        rep += f"{self.type[:5]:5s}_"
         rep += f"{self.type_index:<3}  "
         rep += f"iou_loss: {self._iou_loss}, "
         rep += f"iou_norm: {self._iou_normalizer}, "

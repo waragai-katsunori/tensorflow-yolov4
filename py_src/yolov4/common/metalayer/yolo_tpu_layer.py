@@ -21,12 +21,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from .base_layer import BaseLayer
-from .convolutional_layer import ConvolutionalLayer
-from .maxpool_layer import MaxpoolLayer
-from .net_layer import NetLayer
-from .route_layer import RouteLayer
-from .shortcut_layer import ShortcutLayer
-from .upsample_layer import UpsampleLayer
 from .yolo_layer import YoloLayer
-from .yolo_tpu_layer import YoloTpuLayer
+
+
+class YoloTpuLayer(YoloLayer):
+    def __init__(self, index: int, type_index: int):
+        super().__init__(index=index, type_index=type_index)
+        self._type_ = "yolo_tpu"
