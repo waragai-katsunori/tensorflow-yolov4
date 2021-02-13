@@ -64,23 +64,9 @@ class YOLOConfig:
             self._layer_count,
             self._model_name,
         ) = parser.parse_cfg(cfg_path=cfg_path)
-        if len(self._names) != 0:
-            yolo_0 = self._metalayers["yolo_0"]
-            if yolo_0.classes != len(self._names):
-                raise RuntimeError(
-                    "YOLOConfig: '[yolo] classes' of 'cfg' and the number of"
-                    " 'names' do not match."
-                )
 
     def parse_names(self, names_path: str):
         self._names = parser.parse_names(names_path=names_path)
-        if len(self._metalayers) != 0:
-            yolo_0 = self._metalayers["yolo_0"]
-            if yolo_0.classes != len(self._names):
-                raise RuntimeError(
-                    "YOLOConfig: '[yolo] classes' of 'cfg' and the number of"
-                    " 'names' do not match."
-                )
 
     # Property #################################################################
 
