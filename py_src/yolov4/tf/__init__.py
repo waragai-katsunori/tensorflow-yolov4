@@ -103,17 +103,13 @@ class YOLOv4(BaseClass):
         yolos = self._model(x, training=False)
         # [yolo0, yolo1, ...]
         # yolo == Dim(batch, height, width, channels)
+        batch = yolos[0].shape[0]
+
         candidates = []
         for i in range(self.config.layer_count["yolo"]):
             metayolo = self.config.find_metalayer("yolo", i)
             stride = 5 + metayolo.classes
-            for n in range(len(metayolo.mask)):
-                candidates.append(
-                    K.reshape(
-                        yolos[i][..., n * stride : (n + 1) * stride],
-                        shape=(-1, metayolo.height * metayolo.width, stride),
-                    )
-                )
+            candidates.append(K.reshape(yolos[i], shape=(batch, -1, stride)))
 
         return K.concatenate(candidates, axis=1)
 
@@ -123,7 +119,8 @@ class YOLOv4(BaseClass):
 
         @param frame: Dim(height, width, channels)
 
-        @return pred_bboxes == Dim(-1, (x, y, w, h, class_id, probability))
+        @return pred_bboxes
+            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
         """
         # image_data == Dim(1, input_size[1], input_size[0], channels)
         height, width, _ = frame.shape
