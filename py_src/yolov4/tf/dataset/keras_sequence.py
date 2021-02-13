@@ -37,6 +37,8 @@ from ...common import (
 from ...common.config import YOLOConfig
 from ...common.parser import parse_dataset
 
+_AUGMETATION_CACHE_SIZE = 50
+
 
 class YOLODataset(Sequence):
     def __init__(
@@ -90,6 +92,11 @@ class YOLODataset(Sequence):
         else:
             self._augmentation_batch = 0
             self._training = False
+
+        self._augmentation_cache = [
+            self._get_dataset(i) for i in range(_AUGMETATION_CACHE_SIZE)
+        ]
+        self._augmentation_cache_index = 0
 
     def _convert_dataset_to_ground_truth(self, dataset_bboxes):
         """
@@ -155,6 +162,13 @@ class YOLODataset(Sequence):
 
         for i in range(self._metanet.batch - self._augmentation_batch):
             image, bboxes = self._get_dataset(start_index + i)
+            self._augmentation_cache[self._augmentation_cache_index] = (
+                image,
+                bboxes,
+            )
+            self._augmentation_cache_index = (
+                self._augmentation_cache_index + 1
+            ) % _AUGMETATION_CACHE_SIZE
 
             batch_x.append(image)
             ground_truth = self._convert_dataset_to_ground_truth(bboxes)
@@ -171,13 +185,12 @@ class YOLODataset(Sequence):
             if augmentation == "mosaic":
                 image, bboxes = mosaic(
                     *[
-                        self._get_dataset(
-                            start_index
-                            + np.random.randint(
+                        self._augmentation_cache[
+                            np.random.randint(
                                 0,
-                                self._metanet.batch - self._augmentation_batch,
+                                _AUGMETATION_CACHE_SIZE,
                             )
-                        )
+                        ]
                         for _ in range(4)
                     ]
                 )
