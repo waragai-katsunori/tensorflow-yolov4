@@ -138,7 +138,7 @@ def parse_names(names_path: str) -> Dict[int, str]:
 
 
 def parse_dataset(
-    dataset_path: str,
+    dataset_list: str,
     dataset_type: str = "converted_coco",
     image_path_prefix: str = "",
 ):
@@ -159,7 +159,7 @@ def parse_dataset(
     """
     dataset = []
 
-    with open(dataset_path, "r") as fd:
+    with open(dataset_list, "r") as fd:
         lines = fd.readlines()
 
         if dataset_type == "converted_coco":
@@ -205,7 +205,7 @@ def parse_dataset(
 
     if len(dataset) == 0:
         raise RuntimeError(
-            f"parse_dataset: There is no dataset in '{dataset_path}'."
+            f"parse_dataset: There is no dataset in '{dataset_list}'."
         )
 
     # Select 5 sets randomly and check the data format

@@ -44,13 +44,13 @@ class YOLODataset(Sequence):
     def __init__(
         self,
         config: YOLOConfig,
-        dataset_path: str,
+        dataset_list: str,
         dataset_type: str = "converted_coco",
         image_path_prefix: str = "",
         training: bool = True,
     ):
         self.dataset = parse_dataset(
-            dataset_path=dataset_path,
+            dataset_list=dataset_list,
             dataset_type=dataset_type,
             image_path_prefix=image_path_prefix,
         )
