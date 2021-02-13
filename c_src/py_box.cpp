@@ -278,30 +278,39 @@ py::array_t<float> yolo_diou_nms(py::array_t<float> &candidates, float beta1) {
         }
     }
 
+    if(count == 0) {
+        auto result = py::array_t<float>({1, 9});
+        for(int k = 0; k < 9; k++) { result.mutable_at(0, k) = 0; }
+        return result;
+    }
+
     v_ptr.reserve(count);
 
     for(int i = 0; i < count; i++) { v_ptr.push_back(&cands_ptr[stride * i]); }
 
-    for(int k = 0; k < classes; k++) {
-        // Descending
-        std::sort(v_ptr.begin(), v_ptr.end(), [k](float_t *a, float *b) {
-            return a[5 + k] > b[5 + k];
-        });
+    if(count != 1) {
+        for(int k = 0; k < classes; k++) {
+            // Descending
+            std::sort(v_ptr.begin(), v_ptr.end(), [k](float_t *a, float *b) {
+                return a[5 + k] > b[5 + k];
+            });
 
-        std::vector<float *>::iterator iter = v_ptr.begin();
-        for(float *a: v_ptr) {
-            iter++;    // next(a)
-            if(a[5 + k] == 0) continue;
+            std::vector<float *>::iterator iter = v_ptr.begin();
+            for(float *a: v_ptr) {
+                iter++;    // next(a)
+                if(a[5 + k] == 0) continue;
 
-            xywh &a_xywh = *reinterpret_cast<xywh *>(a);
-            lrtb  a_lrtb = get_lrtb(a_xywh);
-            for(auto it = iter; it != v_ptr.end(); it++) {
-                float *b      = *it;
-                xywh & b_xywh = *reinterpret_cast<xywh *>(b);
-                lrtb   b_lrtb = get_lrtb(b_xywh);
-                float  diou   = get_diou(a_xywh, b_xywh, a_lrtb, b_lrtb, beta1);
-                // remove
-                if(diou > nms_thresh) { b[5 + k] = 0; }
+                xywh &a_xywh = *reinterpret_cast<xywh *>(a);
+                lrtb  a_lrtb = get_lrtb(a_xywh);
+                for(auto it = iter; it != v_ptr.end(); it++) {
+                    float *b      = *it;
+                    xywh & b_xywh = *reinterpret_cast<xywh *>(b);
+                    lrtb   b_lrtb = get_lrtb(b_xywh);
+                    float  diou
+                        = get_diou(a_xywh, b_xywh, a_lrtb, b_lrtb, beta1);
+                    // remove
+                    if(diou > nms_thresh) { b[5 + k] = 0; }
+                }
             }
         }
     }
