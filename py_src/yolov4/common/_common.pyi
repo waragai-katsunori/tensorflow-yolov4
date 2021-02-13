@@ -25,6 +25,8 @@ from typing import List
 
 import numpy as np
 
+# pylint:disable=unused-argument,multiple-statements
+
 def convert_dataset_to_ground_truth(
     dataset: np.ndarray, metayolos: np.ndarray, anchors: np.ndarray
 ) -> List[np.ndarray]: ...
@@ -35,4 +37,4 @@ def fit_to_original(
     out_height: int,
     out_width: int,
 ): ...
-def yolo_diou_nms(candidates: np.ndarray, beta1: float) -> int: ...
+def yolo_diou_nms(candidates: np.ndarray, beta1: float) -> np.ndarray: ...
