@@ -21,26 +21,20 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from .convolutional_layer import ConvolutionalLayer
-from .maxpool_layer import MaxpoolLayer
-from .route_layer import RouteLayer
-from .shortcut_layer import ShortcutLayer
-from .upsample_layer import UpsampleLayer
-from .yolo_layer import YoloLayer
-from .yolo_tpu_layer import YoloTpuLayer
-
-_METALAYER_TYPE_TO_LAYER_MAP = {
-    "convolutional": ConvolutionalLayer,
-    "maxpool": MaxpoolLayer,
-    "route": RouteLayer,
-    "shortcut": ShortcutLayer,
-    "upsample": UpsampleLayer,
-    "yolo": YoloLayer,
-    "yolo_tpu": YoloTpuLayer,
-}
+import tensorflow.keras.backend as K
+from tensorflow.keras.layers import Layer
 
 
-def get_layer_from_metalayer(metalayer, metanet):
-    return _METALAYER_TYPE_TO_LAYER_MAP[metalayer.type](
-        metalayer=metalayer, metanet=metanet
-    )
+class YoloTpuLayer(Layer):
+    def __init__(self, metalayer, metanet):
+        super().__init__(name=metalayer.name)
+        self.metalayer = metalayer
+        self.metanet = metanet
+
+    def call(self, x):
+        """
+        @param `x`: Dim(height, width, height, channels)
+        """
+        sig = K.sigmoid(x)
+
+        return x, sig

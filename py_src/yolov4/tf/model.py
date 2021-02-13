@@ -75,7 +75,7 @@ class YOLOv4Model(Model):
                 else:
                     output.append(layer(output[i - 1]))
 
-                if layer.metalayer.type == "yolo":
+                if layer.metalayer.type in ("yolo", "yolo_tpu"):
                     return_val.append(output[i])
 
         return return_val

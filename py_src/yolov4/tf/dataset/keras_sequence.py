@@ -55,8 +55,17 @@ class YOLODataset(Sequence):
             image_path_prefix=image_path_prefix,
         )
         self._metayolos = []
-        for i in range(config.layer_count["yolo"]):
-            self._metayolos.append(config.find_metalayer("yolo", i))
+        if config.layer_count["yolo"] > 0:
+            for i in range(config.layer_count["yolo"]):
+                self._metayolos.append(config.find_metalayer("yolo", i))
+        elif config.layer_count["yolo_tpu"] > 0:
+            for i in range(config.layer_count["yolo_tpu"]):
+                self._metayolos.append(config.find_metalayer("yolo_tpu", i))
+        else:
+            raise RuntimeError(
+                "YOLODataset: model does not have a yolo or yolo_tpu layer"
+            )
+
         self._metanet = config.net
         self._metayolos_np = np.zeros(
             (len(self._metayolos), 7 + len(self._metayolos[-1].mask)),
