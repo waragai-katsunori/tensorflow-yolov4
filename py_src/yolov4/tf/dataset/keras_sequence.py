@@ -182,6 +182,7 @@ class YOLODataset(Sequence):
                     ]
                 )
 
+            batch_x.append(image)
             ground_truth = self._convert_dataset_to_ground_truth(bboxes)
             for j in range(len(self._metayolos)):
                 batch_y[j].append(ground_truth[j])

@@ -74,7 +74,7 @@ def mosaic(dataset0, dataset1, dataset2, dataset3):
             bboxes = [[x, y, w, h, class_id], ...]
     """
     size = dataset0[0].shape[1:3]  # height, width
-    image = np.empty((1, size[0], size[1], 3))
+    image = np.empty((1, size[0], size[1], 3), dtype=np.float32)
     bboxes = []
 
     partition_x = int((np.random.rand() * 0.6 + 0.2) * size[1])
@@ -186,7 +186,8 @@ def mosaic(dataset0, dataset1, dataset2, dataset3):
                             (y_max - y_min) / size[0],
                             class_id,
                         ],
-                    ]
+                    ],
+                    dtype=np.float32,
                 )
             )
 
