@@ -39,18 +39,20 @@ class BaseClass:
     def __init__(self):
         self.config = YOLOConfig()
 
-    def yolo_diou_nms(self, candidates: np.ndarray) -> np.ndarray:
+    @staticmethod
+    def yolo_diou_nms(candidates: np.ndarray, beta_nms: float) -> np.ndarray:
         """
         Warning!
             - change order
             - change c0 -> p(c0)
 
         @param `candidates`: Dim(-1, 5 + len(classes))
+        @param `beta_nms`: rdiou = pow(d / c, beta1);
 
         @return `pred_bboxes`
             Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
         """
-        return _yolo_diou_nms(candidates, self.config.yolo_0.beta_nms)
+        return _yolo_diou_nms(candidates=candidates, beta1=beta_nms)
 
     def fit_to_original(
         self, pred_bboxes: np.ndarray, origin_height: int, origin_width: int

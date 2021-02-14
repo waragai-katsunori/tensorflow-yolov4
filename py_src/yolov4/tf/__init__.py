@@ -131,7 +131,9 @@ class YOLOv4(BaseClass):
         candidates = self._predict(image_data)[0].numpy()
 
         # Select 0
-        pred_bboxes = self.yolo_diou_nms(candidates)
+        pred_bboxes = self.yolo_diou_nms(
+            candidates=candidates, beta_nms=self.config.yolo_0.beta_nms
+        )
         self.fit_to_original(pred_bboxes, height, width)
         return pred_bboxes
 
