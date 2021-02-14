@@ -29,7 +29,7 @@ def save_as_tflite(
     tflite_path: str,
     quantization: str = "",
     dataset=None,
-    num_calibration_steps: int = 100,
+    num_calibration_steps: int = 200,
 ):
     """
     Save model and weights as tflite
