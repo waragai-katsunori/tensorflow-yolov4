@@ -233,7 +233,7 @@ void fit_to_original(py::array_t<float> &pred_bboxes,
 
 py::array_t<float> yolo_diou_nms(py::array_t<float> &candidates, float beta1) {
     const float thresh = .005;    // Pr(obj) * IOU > 0.05% and Pr(cls) > 0.05%
-    const float nms_thresh = .5;
+    const float nms_thresh = .6;
 
     // sum (height_i * width_i * anchors_i), (x, y, w, h, o, c0, ...)
     auto                 cands     = candidates.mutable_unchecked<2>();
