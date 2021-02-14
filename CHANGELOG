@@ -1,3 +1,27 @@
+tensorflow-yolov4 (3.0.0) unstable; urgency=medium
+
+  * common: parser: add parse_cfg()
+  * common: config: implement YOLOConfig
+  * common: metalayer: implement metalayers
+  * common: metalayer: add YoloTpuLayer
+  * tf: layers: implement layers
+  * tf: layers: redefine BatchNormalization for transfer learning
+  * tf: layers: add YoloTpuLayer
+  * tf: dataset: refactor YOLODataset
+  * tf: dataset: add '_augmentation_cache'
+  * tf: training: refactor YOLOv4Loss
+  * tf: training: implement YOLOCallbackAtEachStep
+  * tf: training: refactor SaveWeightsCallback
+  * tf: utils: move weights.py from tf
+  * tf: utils: move mAP part from tf
+  * tf: utils: move tflite part from tf and fix converting issue
+  * c_src: py_box: add 'yolo_diou_nms'
+  * c_src: py_box: add convert_dataset_to_ground_truth
+  * c_src: layers: implement 'yolo_layer'
+  * tf, tflite: reflect v3.0.0 changes
+
+ -- Hyeonki Hong <hhk7734@gmail.com>  Mon, 15 Feb 2021 00:15:08 +0900
+
 tensorflow-yolov4 (2.1.0) unstable; urgency=medium
 
   * tflite: add edgetpu_lib argument to load_tflite()
