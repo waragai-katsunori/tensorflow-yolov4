@@ -21,39 +21,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include "py_box.h"
-#include "py_layers.h"
+#pragma once
+
+#include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
 
 namespace py = pybind11;
 
-PYBIND11_MODULE(_common, m) {
-    // py_box
-
-    m.def("convert_dataset_to_ground_truth",
-          &convert_dataset_to_ground_truth,
-          py::arg("dataset").noconvert(),
-          py::arg("metayolos").noconvert(),
-          py::arg("anchors").noconvert());
-
-    m.def("fit_to_original",
-          &fit_to_original,
-          py::arg("pred_bboxes").noconvert(),
-          py::arg("in_height"),
-          py::arg("in_width"),
-          py::arg("out_height"),
-          py::arg("out_width"));
-
-    m.def("yolo_diou_nms",
-          &yolo_diou_nms,
-          py::arg("candidates").noconvert(),
-          py::arg("beta1"));
-
-    // py_layers
-
-    m.def("yolo_layer",
-          yolo_layer,
-          py::arg("x").noconvert(),
-          py::arg("logi").noconvert(),
-          py::arg("anchors").noconvert(),
-          py::arg("scale_x_y"));
-}
+py::array_t<float> yolo_layer(py::array_t<float> &x,
+                              py::array_t<float> &logi,
+                              py::array_t<float> &anchors,
+                              const float         scale_x_y);

@@ -50,7 +50,12 @@ class get_pybind_include:
 ext_modules = [
     Extension(
         "yolov4.common._common",
-        sources=["c_src/box.cpp", "c_src/py_box.cpp", "c_src/yolov4.cpp"],
+        sources=[
+            "c_src/box.cpp",
+            "c_src/layers/yolo_layer.cpp",
+            "c_src/py_box.cpp",
+            "c_src/yolov4.cpp",
+        ],
         include_dirs=[
             # Path to pybind11 headers
             "c_src/",
