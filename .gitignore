@@ -4,6 +4,10 @@ __pycache__
 build
 checkpoints
 dist
-log
+log*
+test*
+tmp
+train*
 venv
 yolov4.egg-info
+*.zip

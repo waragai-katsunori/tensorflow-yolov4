@@ -1,7 +1,7 @@
+"""
 MIT License
 
-Copyright (c) 2020 Việt Hùng
-Copyright (c) 2020-2021 Hyeonki Hong <hhk7734@gmail.com>
+Copyright (c) 2021 Hyeonki Hong <hhk7734@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,3 +20,24 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+"""
+from typing import List
+
+import numpy as np
+
+# pylint:disable=unused-argument,multiple-statements
+
+def convert_dataset_to_ground_truth(
+    dataset: np.ndarray, metayolos: np.ndarray, anchors: np.ndarray
+) -> List[np.ndarray]: ...
+def fit_to_original(
+    pred_bboxes: np.ndarray,
+    in_height: int,
+    in_width: int,
+    out_height: int,
+    out_width: int,
+): ...
+def yolo_diou_nms(candidates: np.ndarray, beta1: float) -> np.ndarray: ...
+def yolo_layer(
+    x: np.ndarray, logi: np.ndarray, anchors: np.ndarray, scale_x_y: float
+) -> np.ndarray: ...

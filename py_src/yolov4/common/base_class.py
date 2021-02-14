@@ -1,7 +1,7 @@
 """
 MIT License
 
-Copyright (c) 2020 Hyeonki Hong <hhk7734@gmail.com>
+Copyright (c) 2020-2021 Hyeonki Hong <hhk7734@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,139 +23,53 @@ SOFTWARE.
 """
 from os import path
 import time
-from typing import Union
 
 import cv2
 import numpy as np
 
-from . import media, predict
+from . import media
+from .config import YOLOConfig
+from ._common import (
+    fit_to_original as _fit_to_original,
+    yolo_diou_nms as _yolo_diou_nms,
+)
 
 
 class BaseClass:
-    def __init__(self, tiny: bool = False, tpu: bool = False):
+    def __init__(self):
+        self.config = YOLOConfig()
+
+    @staticmethod
+    def yolo_diou_nms(candidates: np.ndarray, beta_nms: float) -> np.ndarray:
         """
-        Default configuration
+        Warning!
+            - change order
+            - change c0 -> p(c0)
+
+        @param `candidates`: Dim(-1, 5 + len(classes))
+        @param `beta_nms`: rdiou = pow(d / c, beta1);
+
+        @return `pred_bboxes`
+            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
         """
-        self.tiny = tiny
-        self.tpu = tpu
+        return _yolo_diou_nms(candidates=candidates, beta1=beta_nms)
 
-        # properties
-        if tiny:
-            self.anchors = [
-                [[23, 27], [37, 58], [81, 82]],
-                [[81, 82], [135, 169], [344, 319]],
-            ]
-        else:
-            self.anchors = [
-                [[12, 16], [19, 36], [40, 28]],
-                [[36, 75], [76, 55], [72, 146]],
-                [[142, 110], [192, 243], [459, 401]],
-            ]
-        self._classes = None
-        self._input_size = None
-        if tiny:
-            self._strides = np.array([16, 32])
-        else:
-            self._strides = np.array([8, 16, 32])
-        if tiny:
-            self.xyscales = [1.05, 1.05]
-        else:
-            self.xyscales = [1.2, 1.1, 1.05]
-
-    @property
-    def anchors(self):
+    def fit_to_original(
+        self, pred_bboxes: np.ndarray, origin_height: int, origin_width: int
+    ):
         """
-        Usage:
-            yolo.anchors = [12, 16, 19, 36, 40, 28, 36, 75,
-                            76, 55, 72, 146, 142, 110, 192, 243, 459, 401]
-            yolo.anchors = np.array([12, 16, 19, 36, 40, 28, 36, 75,
-                            76, 55, 72, 146, 142, 110, 192, 243, 459, 401])
-            print(yolo.anchors)
+        Warning! change pred_bboxes directly
+
+        @param `pred_bboxes`
+            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
         """
-        return self._anchors
-
-    @anchors.setter
-    def anchors(self, anchors: Union[list, tuple, np.ndarray]):
-        if isinstance(anchors, (list, tuple)):
-            self._anchors = np.array(anchors)
-        elif isinstance(anchors, np.ndarray):
-            self._anchors = anchors
-
-        if self.tiny:
-            self._anchors = self._anchors.astype(np.float32).reshape(2, 3, 2)
-        else:
-            self._anchors = self._anchors.astype(np.float32).reshape(3, 3, 2)
-
-    @property
-    def classes(self):
-        """
-        Usage:
-            yolo.classes = {0: 'person', 1: 'bicycle', 2: 'car', ...}
-            yolo.classes = "path/classes"
-            print(len(yolo.classes))
-        """
-        return self._classes
-
-    @classes.setter
-    def classes(self, data: Union[str, dict]):
-        if isinstance(data, str):
-            self._classes = media.read_classes_names(data)
-        elif isinstance(data, dict):
-            self._classes = data
-        else:
-            raise TypeError("YOLOv4: Set classes path or dictionary")
-
-    @property
-    def input_size(self):
-        """
-        (width, height)
-
-        Usage:
-            yolo.input_size = 608
-            yolo.input_size = (608, 416) # (width, height)
-            print(yolo.input_size)
-        """
-        return self._input_size
-
-    @input_size.setter
-    def input_size(self, size: Union[int, list, tuple]):
-        if isinstance(size, int):
-            size = (size, size)
-        if size[0] % 32 == 0 and size[1] % 32 == 0:
-            self._input_size = tuple(size)
-        else:
-            raise ValueError("YOLOv4: Set input_size to multiples of 32")
-
-    @property
-    def strides(self):
-        """
-        Tiny(convolution stride = 2)
-            640x480 -> 320x240 -> ... -> 40x30 -> ... -> 20x15 -> ... -> 40x30
-            pred_m: 640x480 -> stride = 16 -> 40x30
-            pred_l: 640x480 -> stride = 32 -> 20x15
-        """
-        return self._strides
-
-    @strides.setter
-    def strides(self, strides: Union[list, tuple, np.ndarray]):
-        raise ValueError("YOLOv4: Do not change yolo.strides")
-
-    @property
-    def xyscales(self):
-        """
-        Usage:
-            yolo.xyscales = [1.2, 1.1, 1.05]
-            yolo.xyscales = np.array([1.2, 1.1, 1.05])
-            print(yolo.xyscales)
-        """
-        return self._xyscales
-
-    @xyscales.setter
-    def xyscales(self, xyscales: Union[list, tuple, np.ndarray]):
-        if isinstance(xyscales, (list, tuple)):
-            self._xyscales = np.array(xyscales)
-        elif isinstance(xyscales, np.ndarray):
-            self._xyscales = xyscales
+        _fit_to_original(
+            pred_bboxes,
+            self.config.net.height,
+            self.config.net.width,
+            origin_height,
+            origin_width,
+        )
 
     def resize_image(self, image, ground_truth=None):
         """
@@ -168,62 +82,31 @@ class BaseClass:
             image = yolo.resize_image(image)
             image, ground_truth = yolo.resize_image(image, ground_truth)
         """
+        input_shape = self.config.net.input_shape
         return media.resize_image(
-            image, target_size=self.input_size, ground_truth=ground_truth
+            image,
+            target_shape=input_shape,
+            ground_truth=ground_truth,
         )
 
-    def candidates_to_pred_bboxes(
-        self,
-        candidates,
-        iou_threshold: float = 0.3,
-        score_threshold: float = 0.25,
-    ):
+    def draw_bboxes(self, image, pred_bboxes):
         """
-        @param candidates: Dim(-1, (x, y, w, h, conf, prob_0, prob_1, ...))
-
-        @return Dim(-1, (x, y, w, h, class_id, probability))
-        """
-        return predict.candidates_to_pred_bboxes(
-            candidates,
-            self.input_size,
-            iou_threshold=iou_threshold,
-            score_threshold=score_threshold,
-        )
-
-    def fit_pred_bboxes_to_original(self, pred_bboxes, original_shape):
-        """
-        @param pred_bboxes:    Dim(-1, (x, y, w, h, class_id, probability))
-        @param original_shape: (height, width, channels)
-        """
-        # pylint: disable=no-self-use
-        return predict.fit_pred_bboxes_to_original(
-            pred_bboxes, self.input_size, original_shape
-        )
-
-    def draw_bboxes(self, image, bboxes):
-        """
-        @parma image:  Dim(height, width, channel)
-        @param bboxes: (candidates, 4) or (candidates, 5)
-                [[center_x, center_y, w, h, class_id], ...]
-                [[center_x, center_y, w, h, class_id, propability], ...]
+        @parma `image`:  Dim(height, width, channel)
+        @parma `pred_bboxes`
+            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
 
         @return drawn_image
 
         Usage:
             image = yolo.draw_bboxes(image, bboxes)
         """
-        return media.draw_bboxes(image, bboxes, self.classes)
+        return media.draw_bboxes(image, pred_bboxes, names=self.config.names)
 
     #############
     # Inference #
     #############
 
-    def predict(
-        self,
-        frame: np.ndarray,
-        iou_threshold: float = 0.3,
-        score_threshold: float = 0.25,
-    ):
+    def predict(self, frame: np.ndarray):
         # pylint: disable=unused-argument, no-self-use
         return [[0.0, 0.0, 0.0, 0.0, -1]]
 
@@ -235,8 +118,6 @@ class BaseClass:
         cv_frame_size: tuple = None,
         cv_fourcc: str = None,
         cv_waitKey_delay: int = 1,
-        iou_threshold: float = 0.3,
-        score_threshold: float = 0.25,
     ):
         if isinstance(media_path, str) and not path.exists(media_path):
             raise FileNotFoundError("{} does not exist".format(media_path))
@@ -248,11 +129,7 @@ class BaseClass:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             start_time = time.time()
-            bboxes = self.predict(
-                frame,
-                iou_threshold=iou_threshold,
-                score_threshold=score_threshold,
-            )
+            bboxes = self.predict(frame)
             exec_time = time.time() - start_time
             print("time: {:.2f} ms".format(exec_time * 1000))
 
@@ -286,11 +163,7 @@ class BaseClass:
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
                     predict_start_time = time.time()
-                    bboxes = self.predict(
-                        frame,
-                        iou_threshold=iou_threshold,
-                        score_threshold=score_threshold,
-                    )
+                    bboxes = self.predict(frame)
                     predict_exec_time = time.time() - predict_start_time
 
                     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)

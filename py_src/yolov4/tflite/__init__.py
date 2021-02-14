@@ -1,7 +1,7 @@
 """
 MIT License
 
-Copyright (c) 2020 Hyeonki Hong <hhk7734@gmail.com>
+Copyright (c) 2020-2021 Hyeonki Hong <hhk7734@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -34,6 +34,7 @@ except ModuleNotFoundError:
     load_delegate = tflite.experimental.load_delegate
 
 from ..common.base_class import BaseClass
+from ..common import yolo_layer as _yolo_layer
 
 EDGETPU_SHARED_LIB = {
     "Linux": "libedgetpu.so.1",
@@ -43,87 +44,127 @@ EDGETPU_SHARED_LIB = {
 
 
 class YOLOv4(BaseClass):
-    def __init__(self, tiny: bool = False, tpu: bool = False):
-        """
-        Default configuration
-        """
-        super(YOLOv4, self).__init__(tiny=tiny, tpu=tpu)
-        self.grid_coord = []
-        self.input_index = None
-        self.interpreter = None
-        self.output_index = None
-        self.output_size = None
-
     def load_tflite(
         self, tflite_path: str, edgetpu_lib: str = EDGETPU_SHARED_LIB
     ) -> None:
-        if self.tpu:
-            self.interpreter = tflite.Interpreter(
+        self._tpu = self.config.layer_count["yolo_tpu"] > 0
+
+        if self._tpu:
+            self._interpreter = tflite.Interpreter(
                 model_path=tflite_path,
                 experimental_delegates=[load_delegate(edgetpu_lib)],
             )
         else:
-            self.interpreter = tflite.Interpreter(model_path=tflite_path)
+            self._interpreter = tflite.Interpreter(model_path=tflite_path)
 
-        self.interpreter.allocate_tensors()
-        input_details = self.interpreter.get_input_details()[0]
-        # width, height
-        self.input_size = (input_details["shape"][2], input_details["shape"][1])
-        self.input_index = input_details["index"]
-        output_details = self.interpreter.get_output_details()
-        self.output_index = [details["index"] for details in output_details]
+        self._interpreter.allocate_tensors()
+
+        # input_details
+        input_details = self._interpreter.get_input_details()[0]
+        if (
+            input_details["shape"][1] != self.config.net.input_shape[0]
+            or input_details["shape"][2] != self.config.net.input_shape[1]
+            or input_details["shape"][3] != self.config.net.input_shape[2]
+        ):
+            raise RuntimeError(
+                "YOLOv4: config.input_shape and tflite.input_details['shape']"
+                " do not match."
+            )
+        self._input_details = input_details
+        self._input_float = self._input_details["dtype"] is np.float32
+
+        # output_details
+        self._output_details = self._interpreter.get_output_details()
+
+        layer_type = ""
+        if self._tpu:
+            layer_type = "yolo_tpu"
+        else:
+            layer_type = "yolo"
+
+        self._anhcors = []
+        self._scale_x_y = []
+        self._beta_nms: float
+        for i in range(self.config.layer_count[layer_type]):
+            metayolo = self.config.find_metalayer(layer_type, i)
+            self._beta_nms = metayolo.beta_nms
+            self._anhcors.append(
+                np.zeros((len(metayolo.mask), 2), dtype=np.float32)
+            )
+            self._scale_x_y.append(metayolo.scale_x_y)
+            for j, n in enumerate(metayolo.mask):
+                self._anhcors[i][j, 0] = (
+                    metayolo.anchors[n][0] / self.config.net.width
+                )
+                self._anhcors[i][j, 1] = (
+                    metayolo.anchors[n][1] / self.config.net.height
+                )
+
+    def summary(self):
+        self.config.summary()
 
     #############
     # Inference #
     #############
 
-    def predict(
-        self,
-        frame: np.ndarray,
-        iou_threshold: float = 0.3,
-        score_threshold: float = 0.25,
-    ):
+    def _predict(self, x: np.ndarray) -> np.ndarray:
+        self._interpreter.set_tensor(self._input_details["index"], x)
+        self._interpreter.invoke()
+        # [yolo0, yolo1, ...]
+        # yolo == Dim(1, height, width, channels)
+        # yolo_tpu == x, logistic(x)
+
+        yolos = [
+            self._interpreter.get_tensor(output_detail["index"])
+            for output_detail in self._output_details
+        ]
+
+        candidates = []
+        if self._tpu:
+            num_yolo = len(yolos) // 2
+            _yolos = []
+            for i in range(num_yolo):
+                _yolos.append(
+                    _yolo_layer(
+                        yolos[2 * i],
+                        yolos[2 * i + 1],
+                        self._anhcors[i],
+                        self._scale_x_y[i],
+                    )
+                )
+
+            stride = 5 + self.config.yolo_tpu_0.classes
+            for yolo in _yolos:
+                candidates.append(np.reshape(yolo, (1, -1, stride)))
+
+        else:
+            stride = 5 + self.config.yolo_0.classes
+            for yolo in yolos:
+                candidates.append(np.reshape(yolo, (1, -1, stride)))
+
+        return np.concatenate(candidates, axis=1)
+
+    def predict(self, frame: np.ndarray) -> np.ndarray:
         """
         Predict one frame
 
         @param frame: Dim(height, width, channels)
 
-        @return pred_bboxes == Dim(-1, (x, y, w, h, class_id, probability))
+        @return pred_bboxes
+            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
         """
         # image_data == Dim(1, input_size[1], input_size[0], channels)
+        height, width, _ = frame.shape
+
         image_data = self.resize_image(frame)
-        if not self.tpu:
-            image_data = image_data.astype(np.float32) / 255.0
-        image_data = image_data[np.newaxis, ...]
-
-        # s_pred, m_pred, l_pred
-        # x_pred == Dim(1, g_height, g_width, anchors, (bbox))
-        self.interpreter.set_tensor(self.input_index, image_data)
-        self.interpreter.invoke()
-        if not self.tpu:
-            candidates = [
-                self.interpreter.get_tensor(index)
-                for index in self.output_index
-            ]
+        if self._input_float:
+            candidates = self._predict(
+                image_data[np.newaxis, ...].astype(np.float32) / 255
+            )[0]
         else:
-            candidates = [
-                self.interpreter.get_tensor(index).astype(np.float32) / 255.0
-                for index in self.output_index
-            ]
-        _candidates = []
-        for candidate in candidates:
-            grid_size = candidate.shape[1:3]
-            _candidates.append(
-                np.reshape(
-                    candidate[0], (1, grid_size[0] * grid_size[1] * 3, -1)
-                )
-            )
-        candidates = np.concatenate(_candidates, axis=1)
+            candidates = self._predict(image_data[np.newaxis, ...])[0]
 
-        pred_bboxes = self.candidates_to_pred_bboxes(
-            candidates[0],
-            iou_threshold=iou_threshold,
-            score_threshold=score_threshold,
-        )
-        pred_bboxes = self.fit_pred_bboxes_to_original(pred_bboxes, frame.shape)
+        # Select 0
+        pred_bboxes = self.yolo_diou_nms(candidates, self._beta_nms)
+        self.fit_to_original(pred_bboxes, height, width)
         return pred_bboxes

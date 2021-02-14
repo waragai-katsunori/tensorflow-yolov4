@@ -1,7 +1,7 @@
+"""
 MIT License
 
-Copyright (c) 2020 Việt Hùng
-Copyright (c) 2020-2021 Hyeonki Hong <hhk7734@gmail.com>
+Copyright (c) 2021 Hyeonki Hong <hhk7734@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,3 +20,27 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+"""
+from .convolutional_layer import ConvolutionalLayer
+from .maxpool_layer import MaxpoolLayer
+from .route_layer import RouteLayer
+from .shortcut_layer import ShortcutLayer
+from .upsample_layer import UpsampleLayer
+from .yolo_layer import YoloLayer
+from .yolo_tpu_layer import YoloTpuLayer
+
+_METALAYER_TYPE_TO_LAYER_MAP = {
+    "convolutional": ConvolutionalLayer,
+    "maxpool": MaxpoolLayer,
+    "route": RouteLayer,
+    "shortcut": ShortcutLayer,
+    "upsample": UpsampleLayer,
+    "yolo": YoloLayer,
+    "yolo_tpu": YoloTpuLayer,
+}
+
+
+def get_layer_from_metalayer(metalayer, metanet):
+    return _METALAYER_TYPE_TO_LAYER_MAP[metalayer.type](
+        metalayer=metalayer, metanet=metanet
+    )

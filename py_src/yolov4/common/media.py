@@ -1,7 +1,7 @@
 """
 MIT License
 
-Copyright (c) 2020 Hyeonki Hong <hhk7734@gmail.com>
+Copyright (c) 2020-2021 Hyeonki Hong <hhk7734@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import colorsys
-from typing import Union
+from typing import Dict, Union
 
 # Don't import tensorflow
 import cv2
@@ -45,12 +45,12 @@ for i in range(256):
 
 def resize_image(
     image: np.ndarray,
-    target_size: Union[list, tuple],
+    target_shape: Union[list, tuple],
     ground_truth: np.ndarray = None,
 ):
     """
     @param `image`:        Dim(height, width, channels)
-    @param `target_size`:  (width, height)
+    @param `target_shape`:  (height, width, ...)
     @param `ground_truth`: [[center_x, center_y, w, h, class_id], ...]
 
     @return resized_image or (resized_image, resized_ground_truth)
@@ -61,11 +61,13 @@ def resize_image(
                                                                 ground_truth)
     """
     height, width, _ = image.shape
+    target_height = target_shape[0]
+    target_width = target_shape[1]
 
-    if width / height >= target_size[0] / target_size[1]:
-        scale = target_size[0] / width
+    if width / height >= target_width / target_height:
+        scale = target_width / width
     else:
-        scale = target_size[1] / height
+        scale = target_height / height
 
     # Resize
     if scale != 1:
@@ -76,15 +78,15 @@ def resize_image(
         resized_image = np.copy(image)
 
     # Pad
-    dw = target_size[0] - width
-    dh = target_size[1] - height
+    dw = target_width - width
+    dh = target_height - height
 
     if not (dw == 0 and dh == 0):
         dw = dw // 2
         dh = dh // 2
         # height, width, channels
         padded_image = np.full(
-            (target_size[1], target_size[0], 3), 255, dtype=np.uint8
+            (target_height, target_width, 3), 255, dtype=np.uint8
         )
         padded_image[dh : height + dh, dw : width + dw, :] = resized_image
     else:
@@ -97,44 +99,36 @@ def resize_image(
     ground_truth = np.copy(ground_truth)
 
     if dw > dh:
-        scale = width / target_size[0]
+        scale = width / target_width
         ground_truth[:, 0] = scale * (ground_truth[:, 0] - 0.5) + 0.5
         ground_truth[:, 2] = scale * ground_truth[:, 2]
     elif dw < dh:
-        scale = height / target_size[1]
+        scale = height / target_height
         ground_truth[:, 1] = scale * (ground_truth[:, 1] - 0.5) + 0.5
         ground_truth[:, 3] = scale * ground_truth[:, 3]
 
     return padded_image, ground_truth
 
 
-def draw_bboxes(image: np.ndarray, bboxes: np.ndarray, classes: dict):
+def draw_bboxes(
+    image: np.ndarray, pred_bboxes: np.ndarray, names: Dict[int, str]
+):
     """
-    @parma image:  Dim(height, width, channel)
-    @param bboxes: (candidates, 4) or (candidates, 5)
-            [[center_x, center_y, w, h, class_id], ...]
-            [[center_x, center_y, w, h, class_id, propability], ...]
-    @param classes: {0: 'person', 1: 'bicycle', 2: 'car', ...}
+    @parma `image`:  Dim(height, width, channel)
+    @parma `pred_bboxes`
+        Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
 
     @return drawn_image
 
     Usage:
-        image = media.draw_bboxes(image, bboxes, classes)
+        image = yolo.draw_bboxes(image, bboxes)
     """
     image = np.copy(image)
     height, width, _ = image.shape
 
-    # Set propability
-    if bboxes.shape[-1] == 5:
-        bboxes = np.concatenate(
-            [bboxes, np.full((*bboxes.shape[:-1], 1), 2.0)], axis=-1
-        )
-    else:
-        bboxes = np.copy(bboxes)
-
-    # Convert ratio to length
-    bboxes[:, [0, 2]] = bboxes[:, [0, 2]] * width
-    bboxes[:, [1, 3]] = bboxes[:, [1, 3]] * height
+    bboxes = pred_bboxes * np.array(
+        [width, height, width, height, 1, 1, 1, 1, 1]
+    )
 
     # Draw bboxes
     for bbox in bboxes:
@@ -142,53 +136,64 @@ def draw_bboxes(image: np.ndarray, bboxes: np.ndarray, classes: dict):
         c_y = int(bbox[1])
         half_w = int(bbox[2] / 2)
         half_h = int(bbox[3] / 2)
-        top_left = (c_x - half_w, c_y - half_h)
-        bottom_right = (c_x + half_w, c_y + half_h)
-        class_id = int(bbox[4])
-        bbox_color = BBOX_COLORS[class_id]
+
+        offset_x = min(10, half_w)
+        offset_y = min(10, half_h)
+
         font_size = 0.4
         font_thickness = 1
 
-        # Draw box
-        cv2.rectangle(image, top_left, bottom_right, bbox_color, 2)
+        for index in range(2):
+            cls_id = int(bbox[5 + 2 * index])
+            prob = bbox[6 + 2 * index]
+            color = BBOX_COLORS[cls_id]
 
-        # Draw text box
-        bbox_text = "{}: {:.1%}".format(classes[class_id], bbox[5])
-        t_size = cv2.getTextSize(bbox_text, 0, font_size, font_thickness)[0]
-        cv2.rectangle(
-            image,
-            top_left,
-            (top_left[0] + t_size[0], top_left[1] - t_size[1] - 3),
-            bbox_color,
-            -1,
-        )
+            if prob > 0.24:
+                # Draw box
+                top = c_x - half_w + offset_y * index
+                if top < 0:
+                    top = 0
+                left = c_y - half_h + offset_x * index
+                if left < 0:
+                    left = 0
+                bottom = c_x + half_w
+                if bottom > height:
+                    bottom = height
+                right = c_y + half_h
+                if right > width:
+                    right = width
 
-        # Draw text
-        cv2.putText(
-            image,
-            bbox_text,
-            (top_left[0], top_left[1] - 2),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            font_size,
-            (255 - bbox_color[0], 255 - bbox_color[1], 255 - bbox_color[2]),
-            font_thickness,
-            lineType=cv2.LINE_AA,
-        )
+                top_left = (top, left)
+                bottom_right = (c_x + half_w, c_y + half_h)
+                cv2.rectangle(image, top_left, bottom_right, color, 2)
+
+                # Draw text box
+                bbox_text = "{}: {:.1%}".format(names[cls_id], prob)
+                t_size = cv2.getTextSize(
+                    bbox_text, 0, font_size, font_thickness
+                )[0]
+                cv2.rectangle(
+                    image,
+                    top_left,
+                    (top + t_size[0], left - t_size[1] - 3),
+                    color,
+                    -1,
+                )
+
+                # Draw text
+                cv2.putText(
+                    image,
+                    bbox_text,
+                    (top_left[0], top_left[1] - 2),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    font_size,
+                    (
+                        255 - color[0],
+                        255 - color[1],
+                        255 - color[2],
+                    ),
+                    font_thickness,
+                    lineType=cv2.LINE_AA,
+                )
 
     return image
-
-
-def read_classes_names(classes_name_path):
-    """
-    @return {id: class name}
-    """
-    classes = {}
-    with open(classes_name_path, "r") as fd:
-        index = 0
-        for class_name in fd:
-            class_name = class_name.strip()
-            if len(class_name) != 0:
-                classes[index] = class_name.replace(" ", "_")
-                index += 1
-
-    return classes
