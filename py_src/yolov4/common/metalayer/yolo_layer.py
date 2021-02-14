@@ -33,10 +33,8 @@ class YoloLayer(BaseLayer):
         self._beta_nms: float
         self._classes = 20
         self._cls_normalizer = 1.0
-        self._ignore_thresh = 0.5
         self._iou_loss = "iou"
         self._iou_thresh = 1.0
-        self._iou_thresh_kind = "iou"
         self._iou_normalizer = 0.75
         self._label_smooth_eps = 0.0
         self._mask: tuple
@@ -69,10 +67,6 @@ class YoloLayer(BaseLayer):
         return self._cls_normalizer
 
     @property
-    def ignore_thresh(self) -> float:
-        return self._ignore_thresh
-
-    @property
     def iou_loss(self) -> str:
         return self._iou_loss
 
@@ -82,10 +76,6 @@ class YoloLayer(BaseLayer):
         Recommended to use iou_thresh=0.213
         """
         return self._iou_thresh
-
-    @property
-    def iou_thresh_kind(self) -> str:
-        return self._iou_thresh_kind
 
     @property
     def iou_normalizer(self) -> float:
@@ -134,7 +124,6 @@ class YoloLayer(BaseLayer):
     def __setitem__(self, key: str, value: Any):
         if key in (
             "iou_loss",
-            "iou_thresh_kind",
             "nms_kind",
         ):
             self.__setattr__(f"_{key}", str(value))
@@ -143,7 +132,6 @@ class YoloLayer(BaseLayer):
         elif key in (
             "beta_nms",
             "cls_normalizer",
-            "ignore_thresh",
             "iou_thresh",
             "iou_normalizer",
             "label_smooth_eps",
