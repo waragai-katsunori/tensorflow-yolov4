@@ -218,13 +218,13 @@ def parse_dataset(
             if first_bbox[i] < 0 or first_bbox[i] > 1:
                 raise RuntimeError(
                     "parse_dataset: 'center_x', 'center_y', 'width', and"
-                    " 'height' are between 0.0 and 1.0."
+                    " 'height' should be between 0.0 and 1.0."
                 )
 
         if int(first_bbox[4]) < 0:
             raise RuntimeError(
-                "parse_dataset: 'class_id' is an integer greater than or equal"
-                " to 0."
+                "parse_dataset: 'class_id' should be an integer greater than or"
+                " equal to 0."
             )
 
     return dataset
