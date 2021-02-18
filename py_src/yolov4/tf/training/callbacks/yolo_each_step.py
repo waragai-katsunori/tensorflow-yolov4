@@ -99,16 +99,18 @@ class YOLOCallbackAtEachStep(Callback):
         recall75 = self.model._recall75.value()
         recall75_f = tf.cast(recall75, dtype=tf.float32) / truth_f
 
-        tf.summary.scalar(name="step/iou_loss", data=iou_loss, step=step)
-        tf.summary.scalar(name="step/obj_loss", data=obj_loss, step=step)
-        tf.summary.scalar(name="step/cls_loss", data=cls_loss, step=step)
-        tf.summary.scalar(name="step/total_loss", data=total_loss, step=step)
+        tf.summary.scalar(name="loss/iou_loss", data=iou_loss, step=step)
+        tf.summary.scalar(name="loss/obj_loss", data=obj_loss, step=step)
+        tf.summary.scalar(name="loss/cls_loss", data=cls_loss, step=step)
+        tf.summary.scalar(name="loss/total_loss", data=total_loss, step=step)
 
-        tf.summary.scalar(name="step/total_truth", data=total_truth, step=step)
-        tf.summary.scalar(name="step/truth", data=truth, step=step)
-        tf.summary.scalar(name="step/iou", data=iou, step=step)
-        tf.summary.scalar(name="step/recall50", data=recall50_f, step=step)
-        tf.summary.scalar(name="step/recall75", data=recall75_f, step=step)
+        tf.summary.scalar(
+            name="metric/total_truth", data=total_truth, step=step
+        )
+        tf.summary.scalar(name="metric/truth", data=truth, step=step)
+        tf.summary.scalar(name="metric/iou", data=iou, step=step)
+        tf.summary.scalar(name="metric/recall50", data=recall50_f, step=step)
+        tf.summary.scalar(name="metric/recall75", data=recall75_f, step=step)
 
         if self._verbose == 3:
             verbose = (
