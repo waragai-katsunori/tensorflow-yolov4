@@ -38,9 +38,9 @@ float get_diou(const xywh &a,
     float out_h = out_lrtb.b - out_lrtb.t;
 
     float iou;
-    if(in_w <= 0 or in_h <= 0) {
+    if(in_w <= 0 || in_h <= 0) {
         iou = 0;
-        if(out_w == 0 and out_h == 0) { return 0; }
+        if(out_w == 0 && out_h == 0) { return 0; }
     } else {
         float in  = in_w * in_h;
         float uni = a.w * a.h + b.w * b.h - in;
