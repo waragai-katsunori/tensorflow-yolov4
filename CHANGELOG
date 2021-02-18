@@ -1,3 +1,12 @@
+tensorflow-yolov4 (3.0.1) unstable; urgency=medium
+
+  * pypi: add 'pyproject.toml' and update 'setup.*'
+  * common: parser: update error message
+  * c_src: modify extended operator synonyms
+  * c_src: change c-header to cpp-header
+
+ -- Hyeonki Hong <hhk7734@gmail.com>  Thu, 18 Feb 2021 19:02:01 +0900
+
 tensorflow-yolov4 (3.0.0) unstable; urgency=medium
 
   * common: parser: add parse_cfg()
