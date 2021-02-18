@@ -32,15 +32,25 @@ class RouteLayer(Layer):
         self.metalayer = metalayer
         self.metanet = metanet
 
-    def call(self, x):
-        if self.metalayer.groups != 1:
-            return tf.split(
-                x,
-                self.metalayer.groups,
-                axis=-1,
-            )[self.metalayer.group_id]
+        groups = self.metalayer.groups
+        group_id = self.metalayer.group_id
 
-        if len(self.metalayer.layers) == 1:
+        def _split_and_select(x):
+            return tf.split(x, groups, axis=-1)[group_id]
+
+        def _route(x):
             return x
 
-        return K.concatenate(x, axis=-1)
+        def _concat(x):
+            return K.concatenate(x, axis=-1)
+
+        if self.metalayer.groups != 1:
+            self._route_fucntion = _split_and_select
+        else:
+            if len(self.metalayer.layers) == 1:
+                self._route_fucntion = _route
+            else:
+                self._route_fucntion = _concat
+
+    def call(self, x):
+        return self._route_fucntion(x)
