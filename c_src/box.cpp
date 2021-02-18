@@ -23,7 +23,7 @@
  */
 #include "box.h"
 
-#include <math.h>
+#include <cmath>
 
 float get_diou(const xywh &a,
                const xywh &b,
