@@ -32,45 +32,104 @@ class YoloLayer(Layer):
         self.metalayer = metalayer
         self.metanet = metanet
 
-        self.stride = metalayer.classes + 5
-        self.num_masks = len(metalayer.mask)
+        stride = metalayer.classes + 5
+        num_masks = len(metalayer.mask)
 
-    def call(self, x):
+        def _coords_0(x, training):
+            """
+            @param `x`: Dim(height, width, height, channels)
+
+            @return: Dim(height, width, height, channels)
+                xy: logistic, scale
+                wh: raw or exp(training)
+                oc: logistic
+            """
+            output = tf.TensorArray(x.dtype, size=num_masks)
+            scale_x_y = tf.constant(metalayer.scale_x_y, x.dtype)
+
+            for n in tf.range(num_masks):
+                xy_index = n * stride
+                wh_index = xy_index + 2
+                obj_index = xy_index + 4
+                next_xy_index = (n + 1) * stride
+
+                if scale_x_y == 1.0:
+                    xy = K.sigmoid(x[..., xy_index:wh_index])
+                else:
+                    xy = scale_x_y * K.sigmoid(x[..., xy_index:wh_index]) - (
+                        0.5 * (scale_x_y - 1)
+                    )
+
+                if training:
+                    wh = K.exp(x[..., wh_index:obj_index])
+                else:
+                    wh = x[..., wh_index:obj_index]
+
+                oc = K.sigmoid(x[..., obj_index:next_xy_index])
+
+                output = output.write(
+                    n,
+                    K.concatenate(
+                        [xy, wh, oc],
+                        axis=-1,
+                    ),
+                )
+
+            return K.concatenate(
+                [output.read(n) for n in range(num_masks)], axis=-1
+            )
+
+        def _coords_1(x, training):
+            """
+            @param `x`: Dim(height, width, height, channels)
+
+            @return: Dim(height, width, height, channels)
+                xy: scale
+                wh: raw or pow(training)
+                oc: raw
+            """
+            output = tf.TensorArray(x.dtype, size=num_masks)
+            scale_x_y = tf.constant(metalayer.scale_x_y, x.dtype)
+
+            for n in tf.range(num_masks):
+                xy_index = n * stride
+                wh_index = xy_index + 2
+                obj_index = xy_index + 4
+                next_xy_index = (n + 1) * stride
+
+                xy = scale_x_y * x[..., xy_index:wh_index] - (
+                    0.5 * (scale_x_y - 1)
+                )
+                if training:
+                    wh = K.pow(x[..., wh_index:obj_index] * 2, 2)
+                else:
+                    wh = x[..., wh_index:obj_index]
+
+                output = output.write(
+                    n,
+                    K.concatenate(
+                        [
+                            xy,
+                            wh,
+                            x[..., obj_index:next_xy_index],
+                        ],
+                        axis=-1,
+                    ),
+                )
+
+            return K.concatenate(
+                [output.read(n) for n in range(num_masks)], axis=-1
+            )
+
+        if metalayer.new_coords:
+            self._yolo_function = _coords_1
+        else:
+            self._yolo_function = _coords_0
+
+    def call(self, x, training=False):
         """
         @param `x`: Dim(height, width, height, channels)
 
         @return: Dim(height, width, height, channels)
-            xy: logistic, scale
-            wh: raw
-            oc: logistic
         """
-
-        output = tf.TensorArray(x.dtype, size=self.num_masks)
-        scale_x_y = tf.constant(self.metalayer.scale_x_y, x.dtype)
-
-        for n in tf.range(self.num_masks):
-            xy_index = n * self.stride
-            wh_index = xy_index + 2
-            obj_index = xy_index + 4
-            next_xy_index = (n + 1) * self.stride
-
-            if scale_x_y == 1.0:
-                xy = K.sigmoid(x[..., xy_index:wh_index])
-            else:
-                xy = scale_x_y * K.sigmoid(x[..., xy_index:wh_index]) - (
-                    0.5 * (scale_x_y - 1)
-                )
-
-            oc = K.sigmoid(x[..., obj_index:next_xy_index])
-
-            output = output.write(
-                n,
-                K.concatenate(
-                    [xy, x[..., wh_index:obj_index], oc],
-                    axis=-1,
-                ),
-            )
-
-        return K.concatenate(
-            [output.read(n) for n in range(self.num_masks)], axis=-1
-        )
+        return self._yolo_function(x, training)
