@@ -57,6 +57,6 @@ def fit_to_original(
     out_height: int,
     out_width: int,
 ): ...
-def yolo_layer(
-    x: np.ndarray, logi: np.ndarray, anchors: np.ndarray, scale_x_y: float
-) -> np.ndarray: ...
+def yolo_tpu_layer(
+    x: np.ndarray, logi: np.ndarray, num_masks: int, scale_x_y: float
+): ...
