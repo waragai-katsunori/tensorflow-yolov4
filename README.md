@@ -6,6 +6,8 @@
 
 YOLOv4 Implemented in Tensorflow 2.
 
+`>=v3`, :exclamation: Do not try to train. Not yet stable.
+
 Docs: [https://wiki.loliot.net/docs/lang/python/libraries/yolov4/python-yolov4-about](https://wiki.loliot.net/docs/lang/python/libraries/yolov4/python-yolov4-about)
 
 ## Installation
