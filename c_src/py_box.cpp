@@ -206,6 +206,13 @@ py::list convert_dataset_to_ground_truth(py::array_t<float> &dataset,
     return y_true;
 }
 
+/**
+ * @param pred_bboxes Dim(candidates after NMS, pred_xywh)
+ * @param in_height input data height
+ * @param in_width input data width
+ * @param out_height original image height
+ * @param out_width original image width
+ */
 void fit_to_original(py::array_t<float> &pred_bboxes,
                      const int           in_height,
                      const int           in_width,
@@ -240,7 +247,7 @@ void fit_to_original(py::array_t<float> &pred_bboxes,
  * @param bbox_size 5 + classes
  * @param beta_nms
  *
- * @return Dim(candidates after NMS, 6), 6 is pred_xywh
+ * @return Dim(candidates after NMS, pred_xywh)
  */
 py::array_t<float>
     diou_nms(std::list<float *> &candidates, int bbox_size, float beta_nms) {
@@ -319,13 +326,13 @@ py::array_t<float>
 }
 
 /**
- * @param yolo Dim(1, height, widht, 3 * bbox)
+ * @param yolo Dim(1, height, widht, bbox * len(mask))
  * @param mask
  * @param anchors Dim(None, 2): 0 ~ 1
  * @param beta_nms
  * @param new_coords
  *
- * @return Dim(candidates after NMS, 6), 6 is pred_xywh
+ * @return Dim(candidates after NMS, pred_xywh)
  */
 py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
                                        py::array_t<float> &yolo_1,
@@ -336,7 +343,6 @@ py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
                                        py::array_t<float> &anchors,
                                        float               beta_nms,
                                        bool                new_coords) {
-    // 1, height, width, 3 * bboxes
     std::array<py::detail::unchecked_mutable_reference<float, 4>, 3> yolos = {
         yolo_0.mutable_unchecked<4>(),
         yolo_1.mutable_unchecked<4>(),
@@ -351,8 +357,8 @@ py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
 
     auto biases = anchors.mutable_unchecked<2>();
 
-    const int          bbox_size = yolos[0].shape(3) / 3;
     const int          num_bbox  = masks[0].shape(0);
+    const int          bbox_size = yolos[0].shape(3) / num_bbox;
     std::list<float *> candidates_l;
 
     for(int i = 0; i < 3; i++) {
@@ -399,13 +405,13 @@ py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
 }
 
 /**
- * @param yolo Dim(1, height, widht, 3 * bbox)
+ * @param yolo Dim(1, height, widht, bbox * len(mask))
  * @param mask
  * @param anchors Dim(None, 2): 0 ~ 1
  * @param beta_nms
  * @param new_coords
  *
- * @return Dim(candidates after NMS, 6), 6 is pred_xywh
+ * @return Dim(candidates after NMS, pred_xywh)
  */
 py::array_t<float> get_yolo_tiny_detections(py::array_t<float> &yolo_0,
                                             py::array_t<float> &yolo_1,
@@ -414,7 +420,6 @@ py::array_t<float> get_yolo_tiny_detections(py::array_t<float> &yolo_0,
                                             py::array_t<float> &anchors,
                                             float               beta_nms,
                                             bool                new_coords) {
-    // 1, height, width, 3 * bboxes
     std::array<py::detail::unchecked_mutable_reference<float, 4>, 2> yolos = {
         yolo_0.mutable_unchecked<4>(),
         yolo_1.mutable_unchecked<4>(),
@@ -427,8 +432,8 @@ py::array_t<float> get_yolo_tiny_detections(py::array_t<float> &yolo_0,
 
     auto biases = anchors.mutable_unchecked<2>();
 
-    const int          bbox_size = yolos[0].shape(3) / 3;
     const int          num_bbox  = masks[0].shape(0);
+    const int          bbox_size = yolos[0].shape(3) / num_bbox;
     std::list<float *> candidates_l;
 
     for(int i = 0; i < 2; i++) {
