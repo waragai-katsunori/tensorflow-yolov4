@@ -39,6 +39,7 @@ class YoloLayer(BaseLayer):
         self._label_smooth_eps = 0.0
         self._mask: tuple
         self._max = 200
+        self._new_coords = False
         self._nms_kind = "greedynms"
         self._num = 1
         self._obj_normalizer = 1.0
@@ -94,6 +95,10 @@ class YoloLayer(BaseLayer):
         return self._max
 
     @property
+    def new_coords(self) -> bool:
+        return self._new_coords
+
+    @property
     def nms_kind(self) -> str:
         return self._nms_kind
 
@@ -139,6 +144,8 @@ class YoloLayer(BaseLayer):
             "scale_x_y",
         ):
             self.__setattr__(f"_{key}", float(value))
+        elif key in ("new_coords",):
+            self.__setattr__(f"_{key}", bool(int(value)))
         elif key in ("mask",):
             self.__setattr__(
                 f"_{key}", tuple(int(i.strip()) for i in value.split(","))
