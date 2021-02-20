@@ -106,9 +106,9 @@ def create_mAP_input_files(
 
         # predict
         pred_bboxes = yolo.predict(image)
-        # Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+        # Dim(-1, (x, y, w, h, cls_id, prob))
         pred_bboxes = pred_bboxes * np.array(
-            [width, height, width, height, 1, 1, 1, 1, 1]
+            [width, height, width, height, 1, 1]
         )
 
         # detection-results

@@ -81,7 +81,7 @@ class BaseClass:
         Warning! change pred_bboxes directly
 
         @param `pred_bboxes`
-            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+            Dim(-1, (x, y, w, h, cls_id, prob))
         """
         _fit_to_original(
             pred_bboxes,
@@ -113,7 +113,7 @@ class BaseClass:
         """
         @parma `image`:  Dim(height, width, channel)
         @parma `pred_bboxes`
-            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+            Dim(-1, (x, y, w, h, cls_id, prob))
 
         @return drawn_image
 
