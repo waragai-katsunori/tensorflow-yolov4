@@ -28,7 +28,7 @@
 
 namespace py = pybind11;
 
-py::array_t<float> yolo_layer(py::array_t<float> &x,
-                              py::array_t<float> &logi,
-                              py::array_t<float> &anchors,
-                              const float         scale_x_y);
+void yolo_tpu_layer(py::array_t<float> &x,
+                    py::array_t<float> &logi,
+                    const int           num_masks,
+                    const float         scale_x_y);

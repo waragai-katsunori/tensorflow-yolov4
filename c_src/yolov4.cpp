@@ -67,10 +67,10 @@ PYBIND11_MODULE(_common, m) {
 
     // py_layers
 
-    m.def("yolo_layer",
-          yolo_layer,
+    m.def("yolo_tpu_layer",
+          &yolo_tpu_layer,
           py::arg("x").noconvert(),
           py::arg("logi").noconvert(),
-          py::arg("anchors").noconvert(),
+          py::arg("num_masks"),
           py::arg("scale_x_y"));
 }
