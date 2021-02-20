@@ -1,3 +1,16 @@
+tensorflow-yolov4 (3.1.0) unstable; urgency=medium
+
+  * tf: layers: yolo_layer: remove some operations
+  * common: metalayer: yolo_layer: add `new_coords`
+  * tf: layers: yolo_layer: implement `_coords_1` for `new_coords`
+  * tf: layers: convolutional_layer: add logistic activation
+  * c_src: py_box: add `get_yolo_*_detections`
+  * config: add yolov4-csp.cfg and yolov4x-mish.cfg
+  * c_src: layers: modify yolo_tpu_layer
+  * tf, tflite: reflect v3.1.0 changes
+
+ -- Hyeonki Hong <hhk7734@gmail.com>  Sun, 21 Feb 2021 02:37:18 +0900
+
 tensorflow-yolov4 (3.0.1) unstable; urgency=medium
 
   * pypi: add 'pyproject.toml' and update 'setup.*'
