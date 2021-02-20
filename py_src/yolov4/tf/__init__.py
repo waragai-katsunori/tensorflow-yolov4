@@ -100,17 +100,7 @@ class YOLOv4(BaseClass):
 
     @tf.function
     def _predict(self, x):
-        yolos = self._model(x, training=False)
-        # [yolo0, yolo1, ...]
-        # yolo == Dim(batch, height, width, channels)
-        batch = yolos[0].shape[0]
-
-        candidates = []
-        stride = 5 + self.config.yolo_0.classes
-        for yolo in yolos:
-            candidates.append(K.reshape(yolo, shape=(batch, -1, stride)))
-
-        return K.concatenate(candidates, axis=1)
+        return self._model(x, training=False)
 
     def predict(self, frame: np.ndarray):
         """
@@ -119,7 +109,7 @@ class YOLOv4(BaseClass):
         @param frame: Dim(height, width, channels)
 
         @return pred_bboxes
-            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+            Dim(-1, (x, y, w, h, cls_id, prob))
         """
         # image_data == Dim(1, input_size[1], input_size[0], channels)
         height, width, _ = frame.shape
@@ -128,12 +118,13 @@ class YOLOv4(BaseClass):
         image_data = image_data / 255.0
         image_data = image_data[np.newaxis, ...].astype(np.float32)
 
-        candidates = self._predict(image_data)[0].numpy()
+        candidates = self._predict(image_data)
+        candidates = [
+            c.numpy().astype(np.float32, copy=False) for c in candidates
+        ]
 
         # Select 0
-        pred_bboxes = self.yolo_diou_nms(
-            candidates=candidates, beta_nms=self.config.yolo_0.beta_nms
-        )
+        pred_bboxes = self.get_yolo_detections(yolos=candidates)
         self.fit_to_original(pred_bboxes, height, width)
         return pred_bboxes
 

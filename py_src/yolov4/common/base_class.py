@@ -30,8 +30,9 @@ import numpy as np
 from . import media
 from .config import YOLOConfig
 from ._common import (
+    get_yolo_detections as _get_yolo_detections,
+    get_yolo_tiny_detections as _get_yolo_tiny_detections,
     fit_to_original as _fit_to_original,
-    yolo_diou_nms as _yolo_diou_nms,
 )
 
 
@@ -39,20 +40,39 @@ class BaseClass:
     def __init__(self):
         self.config = YOLOConfig()
 
-    @staticmethod
-    def yolo_diou_nms(candidates: np.ndarray, beta_nms: float) -> np.ndarray:
+    def get_yolo_detections(self, yolos) -> np.ndarray:
         """
         Warning!
             - change order
             - change c0 -> p(c0)
 
-        @param `candidates`: Dim(-1, 5 + len(classes))
-        @param `beta_nms`: rdiou = pow(d / c, beta1);
+        @param `yolos`: List[Dim(1, height, width, 5 + classes)]
 
         @return `pred_bboxes`
-            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+            Dim(-1, (x, y, w, h, cls_id, prob))
         """
-        return _yolo_diou_nms(candidates=candidates, beta1=beta_nms)
+        if len(yolos) == 2:
+            return _get_yolo_tiny_detections(
+                yolo_0=yolos[0],
+                yolo_1=yolos[1],
+                mask_0=self.config.masks[0],
+                mask_1=self.config.masks[1],
+                anchors=self.config.anchors,
+                beta_nms=self.config.metayolos[0].beta_nms,
+                new_coords=self.config.metayolos[0].new_coords,
+            )
+
+        return _get_yolo_detections(
+            yolo_0=yolos[0],
+            yolo_1=yolos[1],
+            yolo_2=yolos[2],
+            mask_0=self.config.masks[0],
+            mask_1=self.config.masks[1],
+            mask_2=self.config.masks[2],
+            anchors=self.config.anchors,
+            beta_nms=self.config.metayolos[0].beta_nms,
+            new_coords=self.config.metayolos[0].new_coords,
+        )
 
     def fit_to_original(
         self, pred_bboxes: np.ndarray, origin_height: int, origin_width: int
