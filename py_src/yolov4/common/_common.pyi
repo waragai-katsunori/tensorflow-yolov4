@@ -30,6 +30,26 @@ import numpy as np
 def convert_dataset_to_ground_truth(
     dataset: np.ndarray, metayolos: np.ndarray, anchors: np.ndarray
 ) -> List[np.ndarray]: ...
+def get_yolo_detections(
+    yolo_0: np.ndarray,
+    yolo_1: np.ndarray,
+    yolo_2: np.ndarray,
+    mask_0: np.ndarray,
+    mask_1: np.ndarray,
+    mask_2: np.ndarray,
+    anchors: np.ndarray,
+    beta_nms: float,
+    new_coords: bool,
+) -> np.ndarray: ...
+def get_yolo_tiny_detections(
+    yolo_0: np.ndarray,
+    yolo_1: np.ndarray,
+    mask_0: np.ndarray,
+    mask_1: np.ndarray,
+    anchors: np.ndarray,
+    beta_nms: float,
+    new_coords: bool,
+) -> np.ndarray: ...
 def fit_to_original(
     pred_bboxes: np.ndarray,
     in_height: int,
@@ -37,7 +57,6 @@ def fit_to_original(
     out_height: int,
     out_width: int,
 ): ...
-def yolo_diou_nms(candidates: np.ndarray, beta1: float) -> np.ndarray: ...
-def yolo_layer(
-    x: np.ndarray, logi: np.ndarray, anchors: np.ndarray, scale_x_y: float
-) -> np.ndarray: ...
+def yolo_tpu_layer(
+    x: np.ndarray, logi: np.ndarray, num_masks: int, scale_x_y: float
+): ...

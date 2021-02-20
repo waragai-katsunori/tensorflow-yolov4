@@ -116,7 +116,7 @@ def draw_bboxes(
     """
     @parma `image`:  Dim(height, width, channel)
     @parma `pred_bboxes`
-        Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+        Dim(-1, (x, y, w, h, cls_id, prob))
 
     @return drawn_image
 
@@ -126,9 +126,7 @@ def draw_bboxes(
     image = np.copy(image)
     height, width, _ = image.shape
 
-    bboxes = pred_bboxes * np.array(
-        [width, height, width, height, 1, 1, 1, 1, 1]
-    )
+    bboxes = pred_bboxes * np.array([width, height, width, height, 1, 1])
 
     # Draw bboxes
     for bbox in bboxes:
@@ -137,63 +135,57 @@ def draw_bboxes(
         half_w = int(bbox[2] / 2)
         half_h = int(bbox[3] / 2)
 
-        offset_x = min(10, half_w)
-        offset_y = min(10, half_h)
-
         font_size = 0.4
         font_thickness = 1
 
-        for index in range(2):
-            cls_id = int(bbox[5 + 2 * index])
-            prob = bbox[6 + 2 * index]
-            color = BBOX_COLORS[cls_id]
+        cls_id = int(bbox[4])
+        prob = bbox[5]
+        color = BBOX_COLORS[cls_id]
 
-            if prob > 0.24:
-                # Draw box
-                top = c_x - half_w + offset_y * index
-                if top < 0:
-                    top = 0
-                left = c_y - half_h + offset_x * index
-                if left < 0:
-                    left = 0
-                bottom = c_x + half_w
-                if bottom > height:
-                    bottom = height
-                right = c_y + half_h
-                if right > width:
-                    right = width
+        if prob > 0.24:
+            # Draw box
+            top = c_x - half_w
+            if top < 10:
+                top = 10
+            left = c_y - half_h
+            if left < 0:
+                left = 0
+            bottom = c_x + half_w
+            if bottom > height:
+                bottom = height
+            right = c_y + half_h
+            if right > width:
+                right = width
 
-                top_left = (top, left)
-                bottom_right = (c_x + half_w, c_y + half_h)
-                cv2.rectangle(image, top_left, bottom_right, color, 2)
+            top_left = (top, left)
+            bottom_right = (c_x + half_w, c_y + half_h)
+            cv2.rectangle(image, top_left, bottom_right, color, 2)
 
-                # Draw text box
-                bbox_text = "{}: {:.1%}".format(names[cls_id], prob)
-                t_size = cv2.getTextSize(
-                    bbox_text, 0, font_size, font_thickness
-                )[0]
-                cv2.rectangle(
-                    image,
-                    top_left,
-                    (top + t_size[0], left - t_size[1] - 3),
-                    color,
-                    -1,
-                )
+            # Draw text box
+            bbox_text = "{}: {:.1%}".format(names[cls_id], prob)
+            t_size = cv2.getTextSize(bbox_text, 0, font_size, font_thickness)[0]
+            cv2.rectangle(
+                image,
+                top_left,
+                (top + t_size[0], left - t_size[1] - 3),
+                color,
+                -1,
+            )
 
-                # Draw text
-                cv2.putText(
-                    image,
-                    bbox_text,
-                    (top_left[0], top_left[1] - 2),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    font_size,
-                    (
-                        255 - color[0],
-                        255 - color[1],
-                        255 - color[2],
-                    ),
-                    font_thickness,
-                    lineType=cv2.LINE_AA,
-                )
+            # Draw text
+            cv2.putText(
+                image,
+                bbox_text,
+                (top_left[0], top_left[1] - 2),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                font_size,
+                (
+                    255 - color[0],
+                    255 - color[1],
+                    255 - color[2],
+                ),
+                font_thickness,
+                lineType=cv2.LINE_AA,
+            )
 
     return image

@@ -32,10 +32,26 @@ py::list convert_dataset_to_ground_truth(py::array_t<float> &dataset,
                                          py::array_t<float> &metayolos,
                                          py::array_t<float> &anchors);
 
+py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
+                                       py::array_t<float> &yolo_1,
+                                       py::array_t<float> &yolo_2,
+                                       py::array_t<int> &  mask_0,
+                                       py::array_t<int> &  mask_1,
+                                       py::array_t<int> &  mask_2,
+                                       py::array_t<float> &anchors,
+                                       float               beta_nms,
+                                       bool                new_coords);
+
+py::array_t<float> get_yolo_tiny_detections(py::array_t<float> &yolo_0,
+                                            py::array_t<float> &yolo_1,
+                                            py::array_t<int> &  mask_0,
+                                            py::array_t<int> &  mask_1,
+                                            py::array_t<float> &anchors,
+                                            float               beta_nms,
+                                            bool                new_coords);
+
 void fit_to_original(py::array_t<float> &pred_bboxes,
                      const int           in_height,
                      const int           in_width,
                      const int           out_height,
                      const int           out_width);
-
-py::array_t<float> yolo_diou_nms(py::array_t<float> &candidates, float beta1);

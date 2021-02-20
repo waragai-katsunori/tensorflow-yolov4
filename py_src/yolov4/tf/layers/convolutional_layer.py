@@ -28,6 +28,7 @@ from tensorflow.keras.layers import (
     Activation,
     # BatchNormalization,
     Conv2D,
+    Lambda,
     LeakyReLU,
     ReLU,
     ZeroPadding2D,
@@ -83,14 +84,16 @@ class ConvolutionalLayer(Sequential):
                 BatchNormalization(epsilon=1e-5, momentum=self.metanet.momentum)
             )
 
-        if metalayer.activation == "mish":
-            self.add(Activation("mish"))
-        elif metalayer.activation == "leaky":
+        if metalayer.activation == "leaky":
             self.add(LeakyReLU(alpha=0.1))
-        elif metalayer.activation == "relu":
-            self.add(ReLU())
         elif metalayer.activation == "linear":
             pass
+        elif metalayer.activation == "logistic":
+            self.add(Lambda(K.sigmoid))
+        elif metalayer.activation == "mish":
+            self.add(Activation("mish"))
+        elif metalayer.activation == "relu":
+            self.add(ReLU())
         else:
             raise ValueError(
                 f"YOLOConv2D: '{metalayer.activation}' is not supported."

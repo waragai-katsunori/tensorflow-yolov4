@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import platform
+from typing import List
 
 import numpy as np
 
@@ -34,7 +35,7 @@ except ModuleNotFoundError:
     load_delegate = tflite.experimental.load_delegate
 
 from ..common.base_class import BaseClass
-from ..common import yolo_layer as _yolo_layer
+from ..common import yolo_tpu_layer as _yolo_tpu_layer
 
 EDGETPU_SHARED_LIB = {
     "Linux": "libedgetpu.so.1",
@@ -82,23 +83,12 @@ class YOLOv4(BaseClass):
         else:
             layer_type = "yolo"
 
-        self._anhcors = []
         self._scale_x_y = []
-        self._beta_nms: float
+        self._num_masks: int
         for i in range(self.config.layer_count[layer_type]):
             metayolo = self.config.find_metalayer(layer_type, i)
-            self._beta_nms = metayolo.beta_nms
-            self._anhcors.append(
-                np.zeros((len(metayolo.mask), 2), dtype=np.float32)
-            )
             self._scale_x_y.append(metayolo.scale_x_y)
-            for j, n in enumerate(metayolo.mask):
-                self._anhcors[i][j, 0] = (
-                    metayolo.anchors[n][0] / self.config.net.width
-                )
-                self._anhcors[i][j, 1] = (
-                    metayolo.anchors[n][1] / self.config.net.height
-                )
+            self._num_masks = len(metayolo.mask)
 
     def summary(self):
         self.config.summary()
@@ -107,7 +97,7 @@ class YOLOv4(BaseClass):
     # Inference #
     #############
 
-    def _predict(self, x: np.ndarray) -> np.ndarray:
+    def _predict(self, x: np.ndarray) -> List[np.ndarray]:
         self._interpreter.set_tensor(self._input_details["index"], x)
         self._interpreter.invoke()
         # [yolo0, yolo1, ...]
@@ -119,30 +109,21 @@ class YOLOv4(BaseClass):
             for output_detail in self._output_details
         ]
 
-        candidates = []
         if self._tpu:
             num_yolo = len(yolos) // 2
             _yolos = []
             for i in range(num_yolo):
-                _yolos.append(
-                    _yolo_layer(
-                        yolos[2 * i],
-                        yolos[2 * i + 1],
-                        self._anhcors[i],
-                        self._scale_x_y[i],
-                    )
+                _yolo_tpu_layer(
+                    yolos[2 * i],
+                    yolos[2 * i + 1],
+                    self._num_masks,
+                    self._scale_x_y[i],
                 )
+                _yolos.append(yolos[2 * i + 1])
 
-            stride = 5 + self.config.yolo_tpu_0.classes
-            for yolo in _yolos:
-                candidates.append(np.reshape(yolo, (1, -1, stride)))
+            return _yolos
 
-        else:
-            stride = 5 + self.config.yolo_0.classes
-            for yolo in yolos:
-                candidates.append(np.reshape(yolo, (1, -1, stride)))
-
-        return np.concatenate(candidates, axis=1)
+        return yolos
 
     def predict(self, frame: np.ndarray) -> np.ndarray:
         """
@@ -151,7 +132,7 @@ class YOLOv4(BaseClass):
         @param frame: Dim(height, width, channels)
 
         @return pred_bboxes
-            Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+            Dim(-1, (x, y, w, h, cls_id, prob))
         """
         # image_data == Dim(1, input_size[1], input_size[0], channels)
         height, width, _ = frame.shape
@@ -160,11 +141,11 @@ class YOLOv4(BaseClass):
         if self._input_float:
             candidates = self._predict(
                 image_data[np.newaxis, ...].astype(np.float32) / 255
-            )[0]
+            )
         else:
-            candidates = self._predict(image_data[np.newaxis, ...])[0]
+            candidates = self._predict(image_data[np.newaxis, ...])
 
         # Select 0
-        pred_bboxes = self.yolo_diou_nms(candidates, self._beta_nms)
+        pred_bboxes = self.get_yolo_detections(yolos=candidates)
         self.fit_to_original(pred_bboxes, height, width)
         return pred_bboxes

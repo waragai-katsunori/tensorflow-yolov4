@@ -27,6 +27,9 @@
 
 #include <cmath>
 #include <iostream>
+#include <list>
+
+static const float kThresh = .005;    // Pr(obj) * IOU > 0.5% and Pr(cls) > 0.5%
 
 /**
  * @param dataset {{x, y, w, h, cls_id}, ...}
@@ -203,6 +206,13 @@ py::list convert_dataset_to_ground_truth(py::array_t<float> &dataset,
     return y_true;
 }
 
+/**
+ * @param pred_bboxes Dim(candidates after NMS, pred_xywh)
+ * @param in_height input data height
+ * @param in_width input data width
+ * @param out_height original image height
+ * @param out_width original image width
+ */
 void fit_to_original(py::array_t<float> &pred_bboxes,
                      const int           in_height,
                      const int           in_width,
@@ -217,128 +227,254 @@ void fit_to_original(py::array_t<float> &pred_bboxes,
 
     if(scale > 1.03) {
         for(int i = 0; i < num_preds; i++) {
-            int stride            = i * 9;
+            int stride            = i * 6;
             preds_ptr[stride + 1] = scale * (preds_ptr[stride + 1] - 0.5) + 0.5;
             preds_ptr[stride + 3] = scale * preds_ptr[stride + 3];
         }
     } else if(scale < 0.97) {
         scale = 1 / scale;
         for(int i = 0; i < num_preds; i++) {
-            int stride            = i * 9;
+            int stride            = i * 6;
             preds_ptr[stride + 0] = scale * (preds_ptr[stride + 0] - 0.5) + 0.5;
             preds_ptr[stride + 2] = scale * preds_ptr[stride + 2];
         }
     }
 }
 
-py::array_t<float> yolo_diou_nms(py::array_t<float> &candidates, float beta1) {
-    const float thresh = .005;    // Pr(obj) * IOU > 0.05% and Pr(cls) > 0.05%
+
+/**
+ * @param candidates Dim(None, 5 + classes)
+ * @param bbox_size 5 + classes
+ * @param beta_nms
+ *
+ * @return Dim(candidates after NMS, pred_xywh)
+ */
+py::array_t<float>
+    diou_nms(std::list<float *> &candidates, int bbox_size, float beta_nms) {
     const float nms_thresh = .6;
 
-    // sum (height_i * width_i * anchors_i), (x, y, w, h, o, c0, ...)
-    auto                 cands     = candidates.mutable_unchecked<2>();
-    float *              cands_ptr = cands.mutable_data(0, 0);
-    const int            num_cands = cands.shape(0);
-    const int            stride    = cands.shape(1);
-    const int            classes   = stride - 5;
-    int                  count     = 0;
-    std::vector<float *> v_ptr;
-
-
-    // find obj > thresh
-    // set c0 = obj * c0 > thresh ? obj * c0 : 0
-    for(py::ssize_t i = 0; i < num_cands; i++) {
-        int c_box_index = count * stride;
-        int c_obj_index = c_box_index + 4;
-        int c_cls_index = c_box_index + 5;
-        int i_box_index = i * stride;
-        int i_obj_index = i_box_index + 4;
-        int i_cls_index = i_box_index + 5;
-
-        float obj = cands_ptr[i_obj_index];
-        if(obj > thresh) {
-            for(int j = 0; j < 4; j++) {
-                // copy x, y, w, h
-                cands_ptr[c_box_index + j] = cands_ptr[i_box_index + j];
-            }
-            // copy o
-            cands_ptr[c_obj_index] = obj;
-
-            bool exist = false;
-            for(int j = 0; j < classes; j++) {
-                float prob = obj * cands_ptr[i_cls_index + j];
-                if(prob > thresh) {
-                    exist                      = true;
-                    cands_ptr[c_cls_index + j] = prob;
-                } else {
-                    cands_ptr[c_cls_index + j] = 0;
-                }
-            }
-            if(exist) { count++; }
-        }
-    }
-
-    if(count == 0) {
-        auto result = py::array_t<float>({1, 9});
-        for(int k = 0; k < 9; k++) { result.mutable_at(0, k) = 0; }
+    if(candidates.size() == 0) {
+        py::array_t<float> result({1, 6});
+        for(int i = 0; i < 6; i++) { result.mutable_at(0, i) = 0; }
         return result;
     }
 
-    v_ptr.reserve(count);
-
-    for(int i = 0; i < count; i++) { v_ptr.push_back(&cands_ptr[stride * i]); }
-
-    if(count != 1) {
-        for(int k = 0; k < classes; k++) {
+    // DIoU NMS
+    if(candidates.size() != 1) {
+        for(int c = 5; c < bbox_size; c++) {
             // Descending
-            std::sort(v_ptr.begin(), v_ptr.end(), [k](float_t *a, float *b) {
-                return a[5 + k] > b[5 + k];
-            });
+            candidates.sort([c](float *a, float *b) { return a[c] > b[c]; });
 
-            std::vector<float *>::iterator iter = v_ptr.begin();
-            for(float *a: v_ptr) {
+            std::list<float *>::iterator iter = candidates.begin();
+            for(float *a: candidates) {
                 iter++;    // next(a)
-                if(a[5 + k] == 0) continue;
+                if(a[c] == 0) continue;
 
                 xywh &a_xywh = *reinterpret_cast<xywh *>(a);
                 lrtb  a_lrtb = get_lrtb(a_xywh);
-                for(auto it = iter; it != v_ptr.end(); it++) {
+                for(auto it = iter; it != candidates.end(); it++) {
                     float *b      = *it;
                     xywh & b_xywh = *reinterpret_cast<xywh *>(b);
                     lrtb   b_lrtb = get_lrtb(b_xywh);
                     float  diou
-                        = get_diou(a_xywh, b_xywh, a_lrtb, b_lrtb, beta1);
+                        = get_diou(a_xywh, b_xywh, a_lrtb, b_lrtb, beta_nms);
                     // remove
-                    if(diou > nms_thresh) { b[5 + k] = 0; }
+                    if(diou > nms_thresh) { b[c] = 0; }
                 }
             }
         }
     }
 
     // pred_box
-    // x, y, w, h, o, class_id, p(c), class_id, p(c)
-    auto   result  = py::array_t<float>({count, 9});
-    float *ret_ptr = result.mutable_data(0, 0);
-    for(int i = 0; i < count; i++) {
-        // set x, y, w, h, o
-        int ret_stride = i * 9;
-        for(int k = 0; k < 5; k++) { ret_ptr[ret_stride + k] = v_ptr[i][k]; }
-        // init
-        for(int k = 5; k < 9; k++) { ret_ptr[ret_stride + k] = 0; }
-
+    // x, y, w, h, class_id, p(c)
+    for(auto it = candidates.begin(); it != candidates.end();) {
         // find
-        for(int k = 0; k < classes; k++) {
-            float prob = v_ptr[i][5 + k];
-            if(prob == 0) continue;
-            if(prob > ret_ptr[ret_stride + 6]) {
-                ret_ptr[ret_stride + 5] = k;
-                ret_ptr[ret_stride + 6] = prob;
-            } else if(prob > ret_ptr[ret_stride + 8]) {
-                ret_ptr[ret_stride + 7] = k;
-                ret_ptr[ret_stride + 8] = prob;
+        float *bbox = *it;
+        bbox[4]     = 0;    // class_id
+        for(int c = 6; c < bbox_size; c++) {
+            if(bbox[c] == 0) continue;
+            if(bbox[c] > bbox[5]) {
+                bbox[4] = c - 5;
+                bbox[5] = bbox[c];
+            }
+        }
+
+        if(bbox[5] < kThresh) {
+            it = candidates.erase(it);
+        } else {
+            it++;
+        }
+    }
+
+    if(candidates.size() == 0) {
+        py::array_t<float> result({1, 6});
+        for(int i = 0; i < 6; i++) { result.mutable_at(0, i) = 0; }
+        return result;
+    }
+
+    int                _num = candidates.size();
+    py::array_t<float> result({_num, 6});
+    int                i = 0;
+    // copy
+    for(auto it = candidates.begin(); it != candidates.end(); it++) {
+        float *bbox  = *it;
+        float *rbbox = result.mutable_data(i++, 0);
+        for(int j = 0; j < 6; j++) { rbbox[j] = bbox[j]; }
+    }
+
+    return result;
+}
+
+/**
+ * @param yolo Dim(1, height, widht, bbox * len(mask))
+ * @param mask
+ * @param anchors Dim(None, 2): 0 ~ 1
+ * @param beta_nms
+ * @param new_coords
+ *
+ * @return Dim(candidates after NMS, pred_xywh)
+ */
+py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
+                                       py::array_t<float> &yolo_1,
+                                       py::array_t<float> &yolo_2,
+                                       py::array_t<int> &  mask_0,
+                                       py::array_t<int> &  mask_1,
+                                       py::array_t<int> &  mask_2,
+                                       py::array_t<float> &anchors,
+                                       float               beta_nms,
+                                       bool                new_coords) {
+    std::array<py::detail::unchecked_mutable_reference<float, 4>, 3> yolos = {
+        yolo_0.mutable_unchecked<4>(),
+        yolo_1.mutable_unchecked<4>(),
+        yolo_2.mutable_unchecked<4>(),
+    };
+
+    std::array<py::detail::unchecked_mutable_reference<int, 1>, 3> masks {
+        mask_0.mutable_unchecked<1>(),
+        mask_1.mutable_unchecked<1>(),
+        mask_2.mutable_unchecked<1>(),
+    };
+
+    auto biases = anchors.mutable_unchecked<2>();
+
+    const int          num_bbox  = masks[0].shape(0);
+    const int          bbox_size = yolos[0].shape(3) / num_bbox;
+    std::list<float *> candidates_l;
+
+    for(int i = 0; i < 3; i++) {
+        int height = yolos[i].shape(1);
+        int width  = yolos[i].shape(2);
+        for(int y = 0; y < height; y++) {
+            for(int x = 0; x < width; x++) {
+                for(int b = 0; b < num_bbox; b++) {
+                    float *bbox = yolos[i].mutable_data(0, y, x, b * bbox_size);
+                    float  obj  = bbox[4];
+                    bool   exist = false;
+                    int    mask  = masks[i](b);
+
+                    if(obj > kThresh) {
+                        for(int c = 5; c < bbox_size; c++) {
+                            float prob = bbox[c] * obj;
+                            if(prob > kThresh) {
+                                bbox[c] = prob;
+                                exist   = true;
+                            } else {
+                                bbox[c] = 0;
+                            }
+                        }
+                    }
+
+                    if(exist) {
+                        bbox[0] = (bbox[0] + x) / width;
+                        bbox[1] = (bbox[1] + y) / height;
+                        if(new_coords) {
+                            bbox[2] = bbox[2] * bbox[2] * 4 * biases(mask, 0);
+                            bbox[3] = bbox[3] * bbox[3] * 4 * biases(mask, 1);
+                        } else {
+                            bbox[2] = exp(bbox[2]) * biases(mask, 0);
+                            bbox[3] = exp(bbox[3]) * biases(mask, 1);
+                        }
+                        candidates_l.push_back(bbox);
+                    }
+                }
             }
         }
     }
 
-    return result;
+    return diou_nms(candidates_l, bbox_size, beta_nms);
+}
+
+/**
+ * @param yolo Dim(1, height, widht, bbox * len(mask))
+ * @param mask
+ * @param anchors Dim(None, 2): 0 ~ 1
+ * @param beta_nms
+ * @param new_coords
+ *
+ * @return Dim(candidates after NMS, pred_xywh)
+ */
+py::array_t<float> get_yolo_tiny_detections(py::array_t<float> &yolo_0,
+                                            py::array_t<float> &yolo_1,
+                                            py::array_t<int> &  mask_0,
+                                            py::array_t<int> &  mask_1,
+                                            py::array_t<float> &anchors,
+                                            float               beta_nms,
+                                            bool                new_coords) {
+    std::array<py::detail::unchecked_mutable_reference<float, 4>, 2> yolos = {
+        yolo_0.mutable_unchecked<4>(),
+        yolo_1.mutable_unchecked<4>(),
+    };
+
+    std::array<py::detail::unchecked_mutable_reference<int, 1>, 2> masks {
+        mask_0.mutable_unchecked<1>(),
+        mask_1.mutable_unchecked<1>(),
+    };
+
+    auto biases = anchors.mutable_unchecked<2>();
+
+    const int          num_bbox  = masks[0].shape(0);
+    const int          bbox_size = yolos[0].shape(3) / num_bbox;
+    std::list<float *> candidates_l;
+
+    for(int i = 0; i < 2; i++) {
+        int height = yolos[i].shape(1);
+        int width  = yolos[i].shape(2);
+        for(int y = 0; y < height; y++) {
+            for(int x = 0; x < width; x++) {
+                for(int b = 0; b < num_bbox; b++) {
+                    float *bbox = yolos[i].mutable_data(0, y, x, b * bbox_size);
+                    float  obj  = bbox[4];
+                    bool   exist = false;
+                    int    mask  = masks[i](b);
+
+                    if(obj > kThresh) {
+                        for(int c = 5; c < bbox_size; c++) {
+                            float prob = bbox[c] * obj;
+                            if(prob > kThresh) {
+                                bbox[c] = prob;
+                                exist   = true;
+                            } else {
+                                bbox[c] = 0;
+                            }
+                        }
+                    }
+
+                    if(exist) {
+                        bbox[0] = (bbox[0] + x) / width;
+                        bbox[1] = (bbox[1] + y) / height;
+                        if(new_coords) {
+                            bbox[2] = bbox[2] * bbox[2] * 4 * biases(mask, 0);
+                            bbox[3] = bbox[3] * bbox[3] * 4 * biases(mask, 1);
+                        } else {
+                            bbox[2] = exp(bbox[2]) * biases(mask, 0);
+                            bbox[3] = exp(bbox[3]) * biases(mask, 1);
+                        }
+                        candidates_l.push_back(bbox);
+                    }
+                }
+            }
+        }
+    }
+
+    return diou_nms(candidates_l, bbox_size, beta_nms);
 }

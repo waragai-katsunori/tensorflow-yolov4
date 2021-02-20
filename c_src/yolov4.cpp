@@ -35,6 +35,28 @@ PYBIND11_MODULE(_common, m) {
           py::arg("metayolos").noconvert(),
           py::arg("anchors").noconvert());
 
+    m.def("get_yolo_detections",
+          &get_yolo_detections,
+          py::arg("yolo_0").noconvert(),
+          py::arg("yolo_1").noconvert(),
+          py::arg("yolo_2").noconvert(),
+          py::arg("mask_0").noconvert(),
+          py::arg("mask_1").noconvert(),
+          py::arg("mask_2").noconvert(),
+          py::arg("anchors").noconvert(),
+          py::arg("beta_nms"),
+          py::arg("new_coords"));
+
+    m.def("get_yolo_tiny_detections",
+          &get_yolo_tiny_detections,
+          py::arg("yolo_0").noconvert(),
+          py::arg("yolo_1").noconvert(),
+          py::arg("mask_0").noconvert(),
+          py::arg("mask_1").noconvert(),
+          py::arg("anchors").noconvert(),
+          py::arg("beta_nms"),
+          py::arg("new_coords"));
+
     m.def("fit_to_original",
           &fit_to_original,
           py::arg("pred_bboxes").noconvert(),
@@ -43,17 +65,12 @@ PYBIND11_MODULE(_common, m) {
           py::arg("out_height"),
           py::arg("out_width"));
 
-    m.def("yolo_diou_nms",
-          &yolo_diou_nms,
-          py::arg("candidates").noconvert(),
-          py::arg("beta1"));
-
     // py_layers
 
-    m.def("yolo_layer",
-          yolo_layer,
+    m.def("yolo_tpu_layer",
+          &yolo_tpu_layer,
           py::arg("x").noconvert(),
           py::arg("logi").noconvert(),
-          py::arg("anchors").noconvert(),
+          py::arg("num_masks"),
           py::arg("scale_x_y"));
 }

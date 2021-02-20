@@ -34,8 +34,8 @@ typedef struct lrtb {
 } lrtb;
 
 typedef struct pred_xywh {
-    // center x, center y, width, height, obj, cls_id0, prob0, cls_id1, prob1
-    float x, y, w, h, o, id0, p0, id1, p1;
+    // center x, center y, width, height, cls_id, prob
+    float x, y, w, h, cls_id, prob;
 } pred_xywh;
 
 float get_diou(const xywh &a_xywh,

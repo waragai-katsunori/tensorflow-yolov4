@@ -106,9 +106,9 @@ def create_mAP_input_files(
 
         # predict
         pred_bboxes = yolo.predict(image)
-        # Dim(-1, (x,y,w,h,o, cls_id0, prob0, cls_id1, prob1))
+        # Dim(-1, (x, y, w, h, cls_id, prob))
         pred_bboxes = pred_bboxes * np.array(
-            [width, height, width, height, 1, 1, 1, 1, 1]
+            [width, height, width, height, 1, 1]
         )
 
         # detection-results
@@ -118,8 +118,8 @@ def create_mAP_input_files(
         ) as fd:
             for xywhcp in pred_bboxes:
                 # name confidence left top right bottom
-                class_name = yolo.config.names[int(xywhcp[5])].replace(" ", "_")
-                probability = xywhcp[6]
+                class_name = yolo.config.names[int(xywhcp[4])].replace(" ", "_")
+                probability = xywhcp[5]
                 if probability < 0.01:
                     continue
                 left = int(xywhcp[0] - xywhcp[2] / 2)

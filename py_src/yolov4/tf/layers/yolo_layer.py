@@ -32,47 +32,104 @@ class YoloLayer(Layer):
         self.metalayer = metalayer
         self.metanet = metanet
 
-        self.cx_cy = []
-        for j in range(metalayer.height):
-            self.cx_cy.append([])
-            for i in range(metalayer.width):
-                self.cx_cy[j].append([i, j])
+        stride = metalayer.classes + 5
+        num_masks = len(metalayer.mask)
 
-    def call(self, x):
+        @tf.function
+        def _coords_0(x, training):
+            """
+            @param `x`: Dim(height, width, height, channels)
+
+            @return: Dim(height, width, height, channels)
+                xy: logistic, scale
+                wh: raw or exp(training)
+                oc: logistic
+            """
+            output = []
+            scale_x_y = tf.constant(metalayer.scale_x_y, x.dtype)
+
+            # for n in tf.range -> tf.while_loop
+            # but failed to convert to tflite.
+            for n in range(num_masks):
+                xy_index = n * stride
+                wh_index = xy_index + 2
+                obj_index = xy_index + 4
+                next_xy_index = (n + 1) * stride
+
+                if scale_x_y == 1.0:
+                    xy = K.sigmoid(x[..., xy_index:wh_index])
+                else:
+                    xy = scale_x_y * K.sigmoid(x[..., xy_index:wh_index]) - (
+                        0.5 * (scale_x_y - 1)
+                    )
+
+                if training:
+                    wh = K.exp(x[..., wh_index:obj_index])
+                else:
+                    wh = x[..., wh_index:obj_index]
+
+                oc = K.sigmoid(x[..., obj_index:next_xy_index])
+
+                output.append(
+                    K.concatenate(
+                        [xy, wh, oc],
+                        axis=-1,
+                    )
+                )
+
+            return K.concatenate(output, axis=-1)
+
+        @tf.function
+        def _coords_1(x, training):
+            """
+            @param `x`: Dim(height, width, height, channels)
+
+            @return: Dim(height, width, height, channels)
+                xy: scale
+                wh: raw or pow(training)
+                oc: raw
+            """
+            output = []
+            scale_x_y = tf.constant(metalayer.scale_x_y, x.dtype)
+
+            # for n in tf.range -> tf.while_loop
+            # but failed to convert to tflite.
+            for n in range(num_masks):
+                xy_index = n * stride
+                wh_index = xy_index + 2
+                obj_index = xy_index + 4
+                next_xy_index = (n + 1) * stride
+
+                xy = scale_x_y * x[..., xy_index:wh_index] - (
+                    0.5 * (scale_x_y - 1)
+                )
+                if training:
+                    wh = K.pow(x[..., wh_index:obj_index] * 2, 2)
+                else:
+                    wh = x[..., wh_index:obj_index]
+
+                output.append(
+                    K.concatenate(
+                        [
+                            xy,
+                            wh,
+                            x[..., obj_index:next_xy_index],
+                        ],
+                        axis=-1,
+                    )
+                )
+
+            return K.concatenate(output, axis=-1)
+
+        if metalayer.new_coords:
+            self._yolo_function = _coords_1
+        else:
+            self._yolo_function = _coords_0
+
+    def call(self, x, training=False):
         """
         @param `x`: Dim(height, width, height, channels)
 
         @return: Dim(height, width, height, channels)
         """
-        sig = K.sigmoid(x)
-        sig_s = tf.split(sig, 3, axis=-1)
-
-        raw_s = tf.split(x, 3, axis=-1)
-
-        output = []
-        for n, mask in enumerate(self.metalayer.mask):
-            # # x, y, w, h, o, c0, c1, ...
-            # Operation not supported on Edge TPU
-            xy, _, oc = tf.split(sig_s[n], [2, 2, -1], axis=-1)
-            _, wh, _ = tf.split(raw_s[n], [2, 2, -1], axis=-1)
-
-            # Can be Mapped to Edge TPU
-            # x, y
-            if self.metalayer.scale_x_y != 1.0:
-                xy = (xy - 0.5) * self.metalayer.scale_x_y + 0.5
-            xy += self.cx_cy
-            xy /= (self.metalayer.width, self.metalayer.height)
-
-            # w, h
-            anchor = self.metalayer.anchors[mask]
-            anchor = (
-                anchor[0] / self.metanet.width,
-                anchor[1] / self.metanet.height,
-            )
-            wh = K.exp(wh) * anchor
-
-            output.append(K.concatenate([xy, wh, oc], axis=-1))
-        return K.concatenate(output, axis=-1)
-
-    def compute_output_shape(self, input_shape):
-        return input_shape
+        return self._yolo_function(x, training)

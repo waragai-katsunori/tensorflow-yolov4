@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+import numpy as np
 from typing import Any
 
 from .base_layer import BaseLayer
@@ -29,7 +30,7 @@ from .base_layer import BaseLayer
 class YoloLayer(BaseLayer):
     def __init__(self, index: int, type_index: int):
         super().__init__(index=index, type_index=type_index, type_name="yolo")
-        self._anchors: tuple
+        self._anchors: np.ndarray
         self._beta_nms: float
         self._classes = 20
         self._cls_normalizer = 1.0
@@ -37,15 +38,16 @@ class YoloLayer(BaseLayer):
         self._iou_thresh = 1.0
         self._iou_normalizer = 0.75
         self._label_smooth_eps = 0.0
-        self._mask: tuple
+        self._mask: np.ndarray
         self._max = 200
+        self._new_coords = False
         self._nms_kind = "greedynms"
         self._num = 1
         self._obj_normalizer = 1.0
         self._scale_x_y = 1.0
 
     @property
-    def anchors(self) -> tuple:
+    def anchors(self) -> np.ndarray:
         return self._anchors
 
     @property
@@ -86,12 +88,16 @@ class YoloLayer(BaseLayer):
         return self._label_smooth_eps
 
     @property
-    def mask(self) -> tuple:
+    def mask(self) -> np.ndarray:
         return self._mask
 
     @property
     def max(self) -> int:
         return self._max
+
+    @property
+    def new_coords(self) -> bool:
+        return self._new_coords
 
     @property
     def nms_kind(self) -> str:
@@ -118,7 +124,13 @@ class YoloLayer(BaseLayer):
         rep += f"obj_norm: {self._obj_normalizer}, "
         rep += f"cls_norm: {self._cls_normalizer}, "
         rep += "\n                 "
-        rep += f"scale_x_y: {self._scale_x_y}"
+        rep += f"scale_x_y: {self._scale_x_y}, "
+        rep += f"new_coords: {self._new_coords}, "
+        rep += f"NMS: {self._nms_kind}, "
+        rep += f"beta_nms: {self._beta_nms}, "
+        rep += "\n                 "
+        rep += f"iou_thresh: {self._iou_thresh}, "
+        rep += f"label_smooth_eps: {self._label_smooth_eps}, "
         return rep
 
     def __setitem__(self, key: str, value: Any):
@@ -139,16 +151,19 @@ class YoloLayer(BaseLayer):
             "scale_x_y",
         ):
             self.__setattr__(f"_{key}", float(value))
+        elif key in ("new_coords",):
+            self.__setattr__(f"_{key}", bool(int(value)))
         elif key in ("mask",):
             self.__setattr__(
-                f"_{key}", tuple(int(i.strip()) for i in value.split(","))
+                f"_{key}",
+                np.array([int(i.strip()) for i in value.split(",")], np.int32),
             )
         elif key == "anchors":
             value = [int(i.strip()) for i in value.split(",")]
             _value = []
             for i in range(len(value) // 2):
                 _value.append((value[2 * i], value[2 * i + 1]))
-            self.__setattr__(f"_{key}", tuple(_value))
+            self.__setattr__(f"_{key}", np.array(_value, np.float32))
         elif key == "input_shape":
             self.__setattr__(f"_{key}", value)
             self._output_shape = self._input_shape

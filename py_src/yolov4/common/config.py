@@ -21,9 +21,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Union
+
+import numpy as np
 
 from . import parser
+from .metalayer import YoloLayer
 
 
 class YOLOConfig:
@@ -65,10 +68,32 @@ class YOLOConfig:
             self._model_name,
         ) = parser.parse_cfg(cfg_path=cfg_path)
 
+        if self.layer_count["yolo"] > 0:
+            self._metayolos = [
+                self.find_metalayer("yolo", i)
+                for i in range(self.layer_count["yolo"])
+            ]
+        elif self.layer_count["yolo_tpu"] > 0:
+            self._metayolos = [
+                self.find_metalayer("yolo_tpu", i)
+                for i in range(self.layer_count["yolo_tpu"])
+            ]
+
+        if len(self._metayolos) > 0:
+            self._masks = [yolo.mask for yolo in self._metayolos]
+
+            self._anchors = self._metayolos[0].anchors / np.array(
+                [self.net.width, self.net.height], np.float32
+            )
+
     def parse_names(self, names_path: str):
         self._names = parser.parse_names(names_path=names_path)
 
     # Property #################################################################
+
+    @property
+    def anchors(self) -> np.ndarray:
+        return self._anchors
 
     @property
     def layer_count(self) -> Dict[str, int]:
@@ -79,8 +104,16 @@ class YOLOConfig:
         return self._layer_count
 
     @property
+    def masks(self) -> List[np.ndarray]:
+        return self._masks
+
+    @property
     def metalayers(self) -> Dict[Union[str, int], Any]:
         return self._metalayers
+
+    @property
+    def metayolos(self) -> List[YoloLayer]:
+        return self._metayolos
 
     @property
     def model_name(self) -> str:
