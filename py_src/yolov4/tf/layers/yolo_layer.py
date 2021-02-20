@@ -35,6 +35,7 @@ class YoloLayer(Layer):
         stride = metalayer.classes + 5
         num_masks = len(metalayer.mask)
 
+        @tf.function
         def _coords_0(x, training):
             """
             @param `x`: Dim(height, width, height, channels)
@@ -44,10 +45,12 @@ class YoloLayer(Layer):
                 wh: raw or exp(training)
                 oc: logistic
             """
-            output = tf.TensorArray(x.dtype, size=num_masks)
+            output = []
             scale_x_y = tf.constant(metalayer.scale_x_y, x.dtype)
 
-            for n in tf.range(num_masks):
+            # for n in tf.range -> tf.while_loop
+            # but failed to convert to tflite.
+            for n in range(num_masks):
                 xy_index = n * stride
                 wh_index = xy_index + 2
                 obj_index = xy_index + 4
@@ -67,18 +70,16 @@ class YoloLayer(Layer):
 
                 oc = K.sigmoid(x[..., obj_index:next_xy_index])
 
-                output = output.write(
-                    n,
+                output.append(
                     K.concatenate(
                         [xy, wh, oc],
                         axis=-1,
-                    ),
+                    )
                 )
 
-            return K.concatenate(
-                [output.read(n) for n in range(num_masks)], axis=-1
-            )
+            return K.concatenate(output, axis=-1)
 
+        @tf.function
         def _coords_1(x, training):
             """
             @param `x`: Dim(height, width, height, channels)
@@ -88,10 +89,12 @@ class YoloLayer(Layer):
                 wh: raw or pow(training)
                 oc: raw
             """
-            output = tf.TensorArray(x.dtype, size=num_masks)
+            output = []
             scale_x_y = tf.constant(metalayer.scale_x_y, x.dtype)
 
-            for n in tf.range(num_masks):
+            # for n in tf.range -> tf.while_loop
+            # but failed to convert to tflite.
+            for n in range(num_masks):
                 xy_index = n * stride
                 wh_index = xy_index + 2
                 obj_index = xy_index + 4
@@ -105,8 +108,7 @@ class YoloLayer(Layer):
                 else:
                     wh = x[..., wh_index:obj_index]
 
-                output = output.write(
-                    n,
+                output.append(
                     K.concatenate(
                         [
                             xy,
@@ -114,12 +116,10 @@ class YoloLayer(Layer):
                             x[..., obj_index:next_xy_index],
                         ],
                         axis=-1,
-                    ),
+                    )
                 )
 
-            return K.concatenate(
-                [output.read(n) for n in range(num_masks)], axis=-1
-            )
+            return K.concatenate(output, axis=-1)
 
         if metalayer.new_coords:
             self._yolo_function = _coords_1
