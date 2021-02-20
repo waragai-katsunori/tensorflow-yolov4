@@ -118,8 +118,8 @@ def create_mAP_input_files(
         ) as fd:
             for xywhcp in pred_bboxes:
                 # name confidence left top right bottom
-                class_name = yolo.config.names[int(xywhcp[5])].replace(" ", "_")
-                probability = xywhcp[6]
+                class_name = yolo.config.names[int(xywhcp[4])].replace(" ", "_")
+                probability = xywhcp[5]
                 if probability < 0.01:
                     continue
                 left = int(xywhcp[0] - xywhcp[2] / 2)
