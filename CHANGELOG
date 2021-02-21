@@ -1,3 +1,13 @@
+tensorflow-yolov4 (3.2.0) unstable; urgency=medium
+
+  * config: add yolov4-tiny-relu-new_coords.cfg
+  * c_src: layers: add yolo_tpu_layer_new_coords
+  * c_src, common, tf, tflite, mAP: add prob_thresh
+  * config: add yolov4-tiny-relu-new_coords-tpu.cfg
+  * common: base_class: modify text
+
+ -- Hyeonki Hong <hhk7734@gmail.com>  Mon, 22 Feb 2021 01:30:53 +0900
+
 tensorflow-yolov4 (3.1.0) unstable; urgency=medium
 
   * tf: layers: yolo_layer: remove some operations
