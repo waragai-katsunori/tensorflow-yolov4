@@ -150,14 +150,13 @@ class BaseClass:
 
         if is_image:
             frame = cv2.imread(media_path)
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             start_time = time.time()
-            bboxes = self.predict(frame, prob_thresh=prob_thresh)
+            bboxes = self.predict(frame_rgb, prob_thresh=prob_thresh)
             exec_time = time.time() - start_time
             print("time: {:.2f} ms".format(exec_time * 1000))
 
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             image = self.draw_bboxes(frame, bboxes)
             cv2.imshow("result", image)
         else:
@@ -184,13 +183,12 @@ class BaseClass:
                     if not is_success:
                         break
 
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
                     predict_start_time = time.time()
-                    bboxes = self.predict(frame, prob_thresh=prob_thresh)
+                    bboxes = self.predict(frame_rgb, prob_thresh=prob_thresh)
                     predict_exec_time = time.time() - predict_start_time
 
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                     image = self.draw_bboxes(frame, bboxes)
                     curr_time = time.time()
 
