@@ -128,11 +128,12 @@ class YOLOv4(BaseClass):
 
         return yolos
 
-    def predict(self, frame: np.ndarray) -> np.ndarray:
+    def predict(self, frame: np.ndarray, prob_thresh: float) -> np.ndarray:
         """
         Predict one frame
 
-        @param frame: Dim(height, width, channels)
+        @param `frame`: Dim(height, width, channels)
+        @param `prob_thresh`
 
         @return pred_bboxes
             Dim(-1, (x, y, w, h, cls_id, prob))
@@ -148,7 +149,8 @@ class YOLOv4(BaseClass):
         else:
             candidates = self._predict(image_data[np.newaxis, ...])
 
-        # Select 0
-        pred_bboxes = self.get_yolo_detections(yolos=candidates)
+        pred_bboxes = self.get_yolo_detections(
+            yolos=candidates, prob_thresh=prob_thresh
+        )
         self.fit_to_original(pred_bboxes, height, width)
         return pred_bboxes

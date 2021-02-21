@@ -40,13 +40,14 @@ class BaseClass:
     def __init__(self):
         self.config = YOLOConfig()
 
-    def get_yolo_detections(self, yolos) -> np.ndarray:
+    def get_yolo_detections(self, yolos, prob_thresh: float) -> np.ndarray:
         """
         Warning!
             - change order
             - change c0 -> p(c0)
 
         @param `yolos`: List[Dim(1, height, width, 5 + classes)]
+        @param `prob_thresh`
 
         @return `pred_bboxes`
             Dim(-1, (x, y, w, h, cls_id, prob))
@@ -60,6 +61,7 @@ class BaseClass:
                 anchors=self.config.anchors,
                 beta_nms=self.config.metayolos[0].beta_nms,
                 new_coords=self.config.metayolos[0].new_coords,
+                prob_thresh=prob_thresh,
             )
 
         return _get_yolo_detections(
@@ -72,6 +74,7 @@ class BaseClass:
             anchors=self.config.anchors,
             beta_nms=self.config.metayolos[0].beta_nms,
             new_coords=self.config.metayolos[0].new_coords,
+            prob_thresh=prob_thresh,
         )
 
     def fit_to_original(
@@ -126,7 +129,7 @@ class BaseClass:
     # Inference #
     #############
 
-    def predict(self, frame: np.ndarray):
+    def predict(self, frame: np.ndarray, prob_thresh: float):
         # pylint: disable=unused-argument, no-self-use
         return [[0.0, 0.0, 0.0, 0.0, -1]]
 
@@ -138,6 +141,7 @@ class BaseClass:
         cv_frame_size: tuple = None,
         cv_fourcc: str = None,
         cv_waitKey_delay: int = 1,
+        prob_thresh: float = 0.25,
     ):
         if isinstance(media_path, str) and not path.exists(media_path):
             raise FileNotFoundError("{} does not exist".format(media_path))
@@ -149,7 +153,7 @@ class BaseClass:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             start_time = time.time()
-            bboxes = self.predict(frame)
+            bboxes = self.predict(frame, prob_thresh=prob_thresh)
             exec_time = time.time() - start_time
             print("time: {:.2f} ms".format(exec_time * 1000))
 
@@ -183,7 +187,7 @@ class BaseClass:
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
                     predict_start_time = time.time()
-                    bboxes = self.predict(frame)
+                    bboxes = self.predict(frame, prob_thresh=prob_thresh)
                     predict_exec_time = time.time() - predict_start_time
 
                     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)

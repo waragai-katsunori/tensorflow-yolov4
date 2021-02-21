@@ -102,11 +102,12 @@ class YOLOv4(BaseClass):
     def _predict(self, x):
         return self._model(x, training=False)
 
-    def predict(self, frame: np.ndarray):
+    def predict(self, frame: np.ndarray, prob_thresh: float):
         """
         Predict one frame
 
-        @param frame: Dim(height, width, channels)
+        @param `frame`: Dim(height, width, channels)
+        @param `prob_thresh`
 
         @return pred_bboxes
             Dim(-1, (x, y, w, h, cls_id, prob))
@@ -123,8 +124,9 @@ class YOLOv4(BaseClass):
             c.numpy().astype(np.float32, copy=False) for c in candidates
         ]
 
-        # Select 0
-        pred_bboxes = self.get_yolo_detections(yolos=candidates)
+        pred_bboxes = self.get_yolo_detections(
+            yolos=candidates, prob_thresh=prob_thresh
+        )
         self.fit_to_original(pred_bboxes, height, width)
         return pred_bboxes
 

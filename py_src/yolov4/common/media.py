@@ -142,50 +142,49 @@ def draw_bboxes(
         prob = bbox[5]
         color = BBOX_COLORS[cls_id]
 
-        if prob > 0.24:
-            # Draw box
-            top = c_x - half_w
-            if top < 10:
-                top = 10
-            left = c_y - half_h
-            if left < 0:
-                left = 0
-            bottom = c_x + half_w
-            if bottom > height:
-                bottom = height
-            right = c_y + half_h
-            if right > width:
-                right = width
+        # Draw box
+        top = c_x - half_w
+        if top < 10:
+            top = 10
+        left = c_y - half_h
+        if left < 0:
+            left = 0
+        bottom = c_x + half_w
+        if bottom > height:
+            bottom = height
+        right = c_y + half_h
+        if right > width:
+            right = width
 
-            top_left = (top, left)
-            bottom_right = (c_x + half_w, c_y + half_h)
-            cv2.rectangle(image, top_left, bottom_right, color, 2)
+        top_left = (top, left)
+        bottom_right = (c_x + half_w, c_y + half_h)
+        cv2.rectangle(image, top_left, bottom_right, color, 2)
 
-            # Draw text box
-            bbox_text = "{}: {:.1%}".format(names[cls_id], prob)
-            t_size = cv2.getTextSize(bbox_text, 0, font_size, font_thickness)[0]
-            cv2.rectangle(
-                image,
-                top_left,
-                (top + t_size[0], left - t_size[1] - 3),
-                color,
-                -1,
-            )
+        # Draw text box
+        bbox_text = "{}: {:.1%}".format(names[cls_id], prob)
+        t_size = cv2.getTextSize(bbox_text, 0, font_size, font_thickness)[0]
+        cv2.rectangle(
+            image,
+            top_left,
+            (top + t_size[0], left - t_size[1] - 3),
+            color,
+            -1,
+        )
 
-            # Draw text
-            cv2.putText(
-                image,
-                bbox_text,
-                (top_left[0], top_left[1] - 2),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                font_size,
-                (
-                    255 - color[0],
-                    255 - color[1],
-                    255 - color[2],
-                ),
-                font_thickness,
-                lineType=cv2.LINE_AA,
-            )
+        # Draw text
+        cv2.putText(
+            image,
+            bbox_text,
+            (top_left[0], top_left[1] - 2),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_size,
+            (
+                255 - color[0],
+                255 - color[1],
+                255 - color[2],
+            ),
+            font_thickness,
+            lineType=cv2.LINE_AA,
+        )
 
     return image

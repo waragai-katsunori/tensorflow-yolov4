@@ -40,7 +40,8 @@ py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
                                        py::array_t<int> &  mask_2,
                                        py::array_t<float> &anchors,
                                        float               beta_nms,
-                                       bool                new_coords);
+                                       bool                new_coords,
+                                       float               prob_thresh);
 
 py::array_t<float> get_yolo_tiny_detections(py::array_t<float> &yolo_0,
                                             py::array_t<float> &yolo_1,
@@ -48,7 +49,8 @@ py::array_t<float> get_yolo_tiny_detections(py::array_t<float> &yolo_0,
                                             py::array_t<int> &  mask_1,
                                             py::array_t<float> &anchors,
                                             float               beta_nms,
-                                            bool                new_coords);
+                                            bool                new_coords,
+                                            float               prob_thresh);
 
 void fit_to_original(py::array_t<float> &pred_bboxes,
                      const int           in_height,

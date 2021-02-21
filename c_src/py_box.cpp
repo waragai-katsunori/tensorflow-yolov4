@@ -29,8 +29,6 @@
 #include <iostream>
 #include <list>
 
-static const float kThresh = .005;    // Pr(obj) * IOU > 0.5% and Pr(cls) > 0.5%
-
 /**
  * @param dataset {{x, y, w, h, cls_id}, ...}
  * @param metayolos {{h, w, c, classes, label_smooth_eps, max, iou_thresh,
@@ -299,7 +297,7 @@ py::array_t<float>
             }
         }
 
-        if(bbox[5] < kThresh) {
+        if(bbox[5] < 0.001) {
             it = candidates.erase(it);
         } else {
             it++;
@@ -331,6 +329,7 @@ py::array_t<float>
  * @param anchors Dim(None, 2): 0 ~ 1
  * @param beta_nms
  * @param new_coords
+ * @param prob_thresh
  *
  * @return Dim(candidates after NMS, pred_xywh)
  */
@@ -342,7 +341,8 @@ py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
                                        py::array_t<int> &  mask_2,
                                        py::array_t<float> &anchors,
                                        float               beta_nms,
-                                       bool                new_coords) {
+                                       bool                new_coords,
+                                       float               prob_thresh) {
     std::array<py::detail::unchecked_mutable_reference<float, 4>, 3> yolos = {
         yolo_0.mutable_unchecked<4>(),
         yolo_1.mutable_unchecked<4>(),
@@ -372,10 +372,10 @@ py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
                     bool   exist = false;
                     int    mask  = masks[i](b);
 
-                    if(obj > kThresh) {
+                    if(obj > prob_thresh) {
                         for(int c = 5; c < bbox_size; c++) {
                             float prob = bbox[c] * obj;
-                            if(prob > kThresh) {
+                            if(prob > prob_thresh) {
                                 bbox[c] = prob;
                                 exist   = true;
                             } else {
@@ -410,6 +410,7 @@ py::array_t<float> get_yolo_detections(py::array_t<float> &yolo_0,
  * @param anchors Dim(None, 2): 0 ~ 1
  * @param beta_nms
  * @param new_coords
+ * @param prob_thresh
  *
  * @return Dim(candidates after NMS, pred_xywh)
  */
@@ -419,7 +420,8 @@ py::array_t<float> get_yolo_tiny_detections(py::array_t<float> &yolo_0,
                                             py::array_t<int> &  mask_1,
                                             py::array_t<float> &anchors,
                                             float               beta_nms,
-                                            bool                new_coords) {
+                                            bool                new_coords,
+                                            float               prob_thresh) {
     std::array<py::detail::unchecked_mutable_reference<float, 4>, 2> yolos = {
         yolo_0.mutable_unchecked<4>(),
         yolo_1.mutable_unchecked<4>(),
@@ -447,10 +449,10 @@ py::array_t<float> get_yolo_tiny_detections(py::array_t<float> &yolo_0,
                     bool   exist = false;
                     int    mask  = masks[i](b);
 
-                    if(obj > kThresh) {
+                    if(obj > prob_thresh) {
                         for(int c = 5; c < bbox_size; c++) {
                             float prob = bbox[c] * obj;
-                            if(prob > kThresh) {
+                            if(prob > prob_thresh) {
                                 bbox[c] = prob;
                                 exist   = true;
                             } else {

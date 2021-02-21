@@ -40,6 +40,7 @@ def get_yolo_detections(
     anchors: np.ndarray,
     beta_nms: float,
     new_coords: bool,
+    prob_thresh: float,
 ) -> np.ndarray: ...
 def get_yolo_tiny_detections(
     yolo_0: np.ndarray,
@@ -49,6 +50,7 @@ def get_yolo_tiny_detections(
     anchors: np.ndarray,
     beta_nms: float,
     new_coords: bool,
+    prob_thresh: float,
 ) -> np.ndarray: ...
 def fit_to_original(
     pred_bboxes: np.ndarray,

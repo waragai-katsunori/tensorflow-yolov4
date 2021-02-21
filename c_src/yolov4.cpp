@@ -45,7 +45,8 @@ PYBIND11_MODULE(_common, m) {
           py::arg("mask_2").noconvert(),
           py::arg("anchors").noconvert(),
           py::arg("beta_nms"),
-          py::arg("new_coords"));
+          py::arg("new_coords"),
+          py::arg("prob_thresh"));
 
     m.def("get_yolo_tiny_detections",
           &get_yolo_tiny_detections,
@@ -55,7 +56,8 @@ PYBIND11_MODULE(_common, m) {
           py::arg("mask_1").noconvert(),
           py::arg("anchors").noconvert(),
           py::arg("beta_nms"),
-          py::arg("new_coords"));
+          py::arg("new_coords"),
+          py::arg("prob_thresh"));
 
     m.def("fit_to_original",
           &fit_to_original,
