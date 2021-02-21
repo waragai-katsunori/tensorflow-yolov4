@@ -196,8 +196,8 @@ class BaseClass:
 
                     cv2.putText(
                         image,
-                        "preidct: {:.2f} ms, fps: {:.2f}".format(
-                            predict_exec_time * 1000,
+                        "FPS - predict(): {:.1f}, inference(): {:.1f}".format(
+                            1 / predict_exec_time,
                             1 / (curr_time - prev_time),
                         ),
                         org=(5, 20),
