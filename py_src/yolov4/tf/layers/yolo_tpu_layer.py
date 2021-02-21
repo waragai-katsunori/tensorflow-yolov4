@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.layers import Layer
 
@@ -31,10 +32,21 @@ class YoloTpuLayer(Layer):
         self.metalayer = metalayer
         self.metanet = metanet
 
+        @tf.function
+        def _coords_0(x):
+            return x, K.sigmoid(x)
+
+        @tf.function
+        def _coords_1(x):
+            return x
+
+        if metalayer.new_coords:
+            self._yolo_function = _coords_1
+        else:
+            self._yolo_function = _coords_0
+
     def call(self, x):
         """
         @param `x`: Dim(height, width, height, channels)
         """
-        sig = K.sigmoid(x)
-
-        return x, sig
+        return self._yolo_function(x)

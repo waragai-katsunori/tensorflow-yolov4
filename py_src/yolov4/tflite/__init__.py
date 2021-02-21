@@ -35,7 +35,10 @@ except ModuleNotFoundError:
     load_delegate = tflite.experimental.load_delegate
 
 from ..common.base_class import BaseClass
-from ..common import yolo_tpu_layer as _yolo_tpu_layer
+from ..common import (
+    yolo_tpu_layer as _yolo_tpu_layer,
+    yolo_tpu_layer_new_coords as _yolo_tpu_layer_new_coords,
+)
 
 EDGETPU_SHARED_LIB = {
     "Linux": "libedgetpu.so.1",
@@ -77,18 +80,12 @@ class YOLOv4(BaseClass):
         # output_details
         self._output_details = self._interpreter.get_output_details()
 
-        layer_type = ""
-        if self._tpu:
-            layer_type = "yolo_tpu"
-        else:
-            layer_type = "yolo"
+        self._num_masks = len(self.config.metayolos[-1].mask)
+        self._new_coords = self.config.metayolos[-1].new_coords
 
         self._scale_x_y = []
-        self._num_masks: int
-        for i in range(self.config.layer_count[layer_type]):
-            metayolo = self.config.find_metalayer(layer_type, i)
+        for metayolo in self.config.metayolos:
             self._scale_x_y.append(metayolo.scale_x_y)
-            self._num_masks = len(metayolo.mask)
 
     def summary(self):
         self.config.summary()
@@ -110,16 +107,22 @@ class YOLOv4(BaseClass):
         ]
 
         if self._tpu:
-            num_yolo = len(yolos) // 2
             _yolos = []
-            for i in range(num_yolo):
-                _yolo_tpu_layer(
-                    yolos[2 * i],
-                    yolos[2 * i + 1],
-                    self._num_masks,
-                    self._scale_x_y[i],
-                )
-                _yolos.append(yolos[2 * i + 1])
+            if self._new_coords:
+                for i, scale_x_y in enumerate(self._scale_x_y):
+                    _yolo_tpu_layer_new_coords(
+                        yolos[i], self._num_masks, scale_x_y
+                    )
+                    _yolos.append(yolos[i])
+            else:
+                for i, scale_x_y in enumerate(self._scale_x_y):
+                    _yolo_tpu_layer(
+                        yolos[2 * i],
+                        yolos[2 * i + 1],
+                        self._num_masks,
+                        scale_x_y,
+                    )
+                    _yolos.append(yolos[2 * i + 1])
 
             return _yolos
 

@@ -60,3 +60,6 @@ def fit_to_original(
 def yolo_tpu_layer(
     x: np.ndarray, logi: np.ndarray, num_masks: int, scale_x_y: float
 ): ...
+def yolo_tpu_layer_new_coords(
+    logi: np.ndarray, num_masks: int, scale_x_y: float
+): ...
