@@ -28,19 +28,14 @@ from typing import Dict, Union
 import cv2
 import numpy as np
 
-
-_HSV = [(1.0 * x / 256, 1.0, 1.0) for x in range(256)]
-_COLORS = list(map(lambda x: colorsys.hsv_to_rgb(*x), _HSV))
-_COLORS = list(
-    map(
-        lambda x: (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)),
-        _COLORS,
-    )
-)
-BBOX_COLORS = []
-_OFFSET = [0, 8, 4, 12, 2, 6, 10, 14, 1, 3, 5, 7, 9, 11, 13, 15]
-for i in range(256):
-    BBOX_COLORS.append(_COLORS[(i * 16) % 256 + _OFFSET[(i * 16) // 256]])
+_MAX_CLASSES = 14 * 6
+_HSV = [(x / _MAX_CLASSES, 1.0, 1.0) for x in range(int(_MAX_CLASSES * 1.2))]
+_COLORS = [colorsys.hsv_to_rgb(*x) for x in _HSV]
+_COLORS = [(int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)) for x in _COLORS]
+_BBOX_COLORS = []
+for i in range(_MAX_CLASSES):
+    # 0 14 28 42 56 70 1 15 29 43 57 71 2 ...
+    _BBOX_COLORS.append(_COLORS[14 * (i % 6) + (i // 6)])
 
 
 def resize_image(
@@ -140,42 +135,37 @@ def draw_bboxes(
 
         cls_id = int(bbox[4])
         prob = bbox[5]
-        color = BBOX_COLORS[cls_id]
+        color = _BBOX_COLORS[cls_id]
+
+        # Get text size
+        bbox_text = "{}: {:.1%}".format(names[cls_id], prob)
+        t_w, t_h = cv2.getTextSize(bbox_text, 0, font_size, font_thickness)[0]
+        t_h += 3
 
         # Draw box
-        top = c_x - half_w
-        if top < 10:
-            top = 10
-        left = c_y - half_h
-        if left < 0:
-            left = 0
-        bottom = c_x + half_w
-        if bottom > height:
-            bottom = height
-        right = c_y + half_h
-        if right > width:
-            right = width
+        top = c_y - half_h
+        if top < t_h:
+            top = t_h
+        left = c_x - half_w
+        if left < 1:
+            left = 1
+        bottom = c_y + half_h
+        if bottom >= height:
+            bottom = height - 1
+        right = c_x + half_w
+        if right >= width:
+            right = width - 1
 
-        top_left = (top, left)
-        bottom_right = (c_x + half_w, c_y + half_h)
-        cv2.rectangle(image, top_left, bottom_right, color, 2)
+        cv2.rectangle(image, (left, top), (right, bottom), color, 1)
 
         # Draw text box
-        bbox_text = "{}: {:.1%}".format(names[cls_id], prob)
-        t_size = cv2.getTextSize(bbox_text, 0, font_size, font_thickness)[0]
-        cv2.rectangle(
-            image,
-            top_left,
-            (top + t_size[0], left - t_size[1] - 3),
-            color,
-            -1,
-        )
+        cv2.rectangle(image, (left, top), (left + t_w, top - t_h), color, -1)
 
         # Draw text
         cv2.putText(
             image,
             bbox_text,
-            (top_left[0], top_left[1] - 2),
+            (left, top - 2),
             cv2.FONT_HERSHEY_SIMPLEX,
             font_size,
             (
