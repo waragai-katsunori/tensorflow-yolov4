@@ -69,3 +69,36 @@ void yolo_tpu_layer(py::array_t<float> &x,
         }
     }
 }
+
+/**
+ * @param logi logistic(x), Dim(1, height, width, channels), this is result.
+ * @param num_masks
+ * @param scale_x_y
+ */
+void yolo_tpu_layer_new_coords(py::array_t<float> &logi,
+                               const int           num_masks,
+                               const float         scale_x_y) {
+    auto   _logi    = logi.mutable_unchecked<4>();
+    float *logi_ptr = _logi.mutable_data(0, 0, 0, 0);
+    float *yolo_ptr = logi_ptr;
+
+    const int height   = _logi.shape(1);
+    const int width    = _logi.shape(2);
+    const int channels = _logi.shape(3);
+    const int box_size = channels / num_masks;
+
+    for(int y = 0; y < height; y++) {
+        for(int x = 0; x < width; x++) {
+            int stride = (y * width + x) * channels;
+            for(int n = 0; n < num_masks; n++) {
+                int box_index = stride + n * box_size;
+
+                // x, y
+                yolo_ptr[box_index]
+                    = scale_x_y * logi_ptr[box_index] - (0.5 * (scale_x_y - 1));
+                yolo_ptr[box_index + 1] = scale_x_y * logi_ptr[box_index + 1]
+                                          - (0.5 * (scale_x_y - 1));
+            }
+        }
+    }
+}

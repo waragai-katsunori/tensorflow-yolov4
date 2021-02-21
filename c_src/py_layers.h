@@ -32,3 +32,7 @@ void yolo_tpu_layer(py::array_t<float> &x,
                     py::array_t<float> &logi,
                     const int           num_masks,
                     const float         scale_x_y);
+
+void yolo_tpu_layer_new_coords(py::array_t<float> &logi,
+                               const int           num_masks,
+                               const float         scale_x_y);

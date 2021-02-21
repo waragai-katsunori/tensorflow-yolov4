@@ -73,4 +73,10 @@ PYBIND11_MODULE(_common, m) {
           py::arg("logi").noconvert(),
           py::arg("num_masks"),
           py::arg("scale_x_y"));
+
+    m.def("yolo_tpu_layer_new_coords",
+          &yolo_tpu_layer_new_coords,
+          py::arg("logi").noconvert(),
+          py::arg("num_masks"),
+          py::arg("scale_x_y"));
 }
