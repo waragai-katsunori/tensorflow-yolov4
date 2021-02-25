@@ -26,6 +26,7 @@ import shutil
 
 import cv2
 import numpy as np
+from tqdm import tqdm
 
 
 def create_mAP_input_files(
@@ -72,7 +73,7 @@ def create_mAP_input_files(
     if num_sample > max_dataset_size:
         num_sample = max_dataset_size
 
-    for i in range(num_sample):
+    for i in tqdm(range(num_sample)):
         # image_path, [[x, y, w, h, class_id], ...]
         image_path, gt_bboxes = dataset.dataset[i % max_dataset_size].copy()
 
