@@ -38,9 +38,9 @@ class YoloLayer(Layer):
         @tf.function
         def _coords_0(x, training):
             """
-            @param `x`: Dim(height, width, height, channels)
+            @param `x`: Dim(batch, height, width, channels)
 
-            @return: Dim(height, width, height, channels)
+            @return: Dim(batch, height, width, channels)
                 xy: logistic, scale
                 wh: raw or exp(training)
                 oc: logistic
@@ -82,9 +82,9 @@ class YoloLayer(Layer):
         @tf.function
         def _coords_1(x, training):
             """
-            @param `x`: Dim(height, width, height, channels)
+            @param `x`: Dim(batch, height, width, channels)
 
-            @return: Dim(height, width, height, channels)
+            @return: Dim(batch, height, width, channels)
                 xy: scale
                 wh: raw or pow(training)
                 oc: raw
@@ -128,8 +128,8 @@ class YoloLayer(Layer):
 
     def call(self, x, training=False):
         """
-        @param `x`: Dim(height, width, height, channels)
+        @param `x`: Dim(batch, height, width, channels)
 
-        @return: Dim(height, width, height, channels)
+        @return: Dim(batch, height, width, channels)
         """
         return self._yolo_function(x, training)
