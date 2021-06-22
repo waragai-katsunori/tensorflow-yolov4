@@ -24,17 +24,17 @@ SOFTWARE.
 from os import makedirs, path
 import shutil
 
-import cv2
+from turbojpeg import TurboJPEG, TJPF_RGB
 import numpy as np
 from tqdm import tqdm
 
 
 def create_mAP_input_files(
-    yolo,
-    dataset,
-    mAP_path: str,
-    images_optional: bool = False,
-    num_sample: int = None,
+        yolo,
+        dataset,
+        mAP_path: str,
+        images_optional: bool = False,
+        num_sample: int = None,
 ):
     """
     Ref: https://github.com/Cartucho/mAP
@@ -81,16 +81,17 @@ def create_mAP_input_files(
             target_path = path.join(img_dir_path, "image_{}.jpg".format(i))
             shutil.copy(image_path, target_path)
 
-        image = cv2.imread(image_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        with open(image_path, "rb") as f:
+            image = TurboJPEG().decode(f.read(), pixel_format=TJPF_RGB)
+
         height, width, _ = image.shape
 
         gt_bboxes = gt_bboxes * np.array([width, height, width, height, 1])
 
         # ground-truth
         with open(
-            path.join(gt_dir_path, "image_{}.txt".format(i)),
-            "w",
+                path.join(gt_dir_path, "image_{}.txt".format(i)),
+                "w",
         ) as fd:
             for xywhc in gt_bboxes:
                 # name left top right bottom
@@ -114,8 +115,8 @@ def create_mAP_input_files(
 
         # detection-results
         with open(
-            path.join(dr_dir_path, "image_{}.txt".format(i)),
-            "w",
+                path.join(dr_dir_path, "image_{}.txt".format(i)),
+                "w",
         ) as fd:
             for xywhcp in pred_bboxes:
                 # name confidence left top right bottom

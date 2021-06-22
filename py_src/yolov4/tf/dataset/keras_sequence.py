@@ -25,7 +25,7 @@ SOFTWARE.
 """
 from typing import List
 
-import cv2
+from turbojpeg import TurboJPEG, TJPF_RGB
 import numpy as np
 from tensorflow.keras.utils import Sequence
 
@@ -65,7 +65,7 @@ class YOLODataset(Sequence):
             raise RuntimeError(
                 "YOLODataset: model does not have a yolo or yolo_tpu layer"
             )
-
+        self.turboJpeg = TurboJPEG()
         self._metanet = config.net
         self._metayolos_np = np.zeros(
             (len(self._metayolos), 7 + len(self._metayolos[-1].mask)),
@@ -127,8 +127,9 @@ class YOLODataset(Sequence):
         """
         # pylint: disable=bare-except
         try:
-            image = cv2.imread(dataset[0])
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            with open(dataset[0], "rb") as f:
+                image = self.turboJpeg.decode(f.read(), pixel_format=TJPF_RGB)
+
         except:
             return None, None
 

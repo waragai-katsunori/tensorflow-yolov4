@@ -11,3 +11,4 @@ train*
 venv
 yolov4.egg-info
 *.zip
+.idea/
