@@ -80,7 +80,7 @@ class BaseClass:
         )
 
     def fit_to_original(
-            self, pred_bboxes: np.ndarray, origin_height: int, origin_width: int
+        self, pred_bboxes: np.ndarray, origin_height: int, origin_width: int
     ):
         """
         Warning! change pred_bboxes directly
@@ -136,14 +136,14 @@ class BaseClass:
         return [[0.0, 0.0, 0.0, 0.0, -1]]
 
     def inference(
-            self,
-            media_path,
-            is_image: bool = True,
-            cv_apiPreference=None,
-            cv_frame_size: tuple = None,
-            cv_fourcc: str = None,
-            cv_waitKey_delay: int = 1,
-            prob_thresh: float = 0.25,
+        self,
+        media_path,
+        is_image: bool = True,
+        cv_apiPreference=None,
+        cv_frame_size: tuple = None,
+        cv_fourcc: str = None,
+        cv_waitKey_delay: int = 1,
+        prob_thresh: float = 0.25,
     ):
         if isinstance(media_path, str) and not path.exists(media_path):
             raise FileNotFoundError("{} does not exist".format(media_path))
@@ -154,7 +154,9 @@ class BaseClass:
             with open(media_path, "rb") as f:
                 imageFile = f.read()
                 frame = self.turboJpeg.decode(imageFile)
-                frame_rgb = self.turboJpeg.decode(imageFile, pixel_format=TJPF_RGB)
+                frame_rgb = self.turboJpeg.decode(
+                    imageFile, pixel_format=TJPF_RGB
+                )
 
             start_time = time.time()
             bboxes = self.predict(frame_rgb, prob_thresh=prob_thresh)

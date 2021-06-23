@@ -30,11 +30,11 @@ from tqdm import tqdm
 
 
 def create_mAP_input_files(
-        yolo,
-        dataset,
-        mAP_path: str,
-        images_optional: bool = False,
-        num_sample: int = None,
+    yolo,
+    dataset,
+    mAP_path: str,
+    images_optional: bool = False,
+    num_sample: int = None,
 ):
     """
     Ref: https://github.com/Cartucho/mAP
@@ -90,8 +90,8 @@ def create_mAP_input_files(
 
         # ground-truth
         with open(
-                path.join(gt_dir_path, "image_{}.txt".format(i)),
-                "w",
+            path.join(gt_dir_path, "image_{}.txt".format(i)),
+            "w",
         ) as fd:
             for xywhc in gt_bboxes:
                 # name left top right bottom
@@ -115,8 +115,8 @@ def create_mAP_input_files(
 
         # detection-results
         with open(
-                path.join(dr_dir_path, "image_{}.txt".format(i)),
-                "w",
+            path.join(dr_dir_path, "image_{}.txt".format(i)),
+            "w",
         ) as fd:
             for xywhcp in pred_bboxes:
                 # name confidence left top right bottom
