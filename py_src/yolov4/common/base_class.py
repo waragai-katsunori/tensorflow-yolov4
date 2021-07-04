@@ -34,11 +34,13 @@ from ._common import (
     get_yolo_tiny_detections as _get_yolo_tiny_detections,
     fit_to_original as _fit_to_original,
 )
+from turbojpeg import TurboJPEG, TJPF_RGB
 
 
 class BaseClass:
     def __init__(self):
         self.config = YOLOConfig()
+        self.turboJpeg = TurboJPEG()
 
     def get_yolo_detections(self, yolos, prob_thresh: float) -> np.ndarray:
         """
@@ -149,8 +151,12 @@ class BaseClass:
         cv2.namedWindow("result", cv2.WINDOW_AUTOSIZE)
 
         if is_image:
-            frame = cv2.imread(media_path)
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            with open(media_path, "rb") as f:
+                imageFile = f.read()
+                frame = self.turboJpeg.decode(imageFile)
+                frame_rgb = self.turboJpeg.decode(
+                    imageFile, pixel_format=TJPF_RGB
+                )
 
             start_time = time.time()
             bboxes = self.predict(frame_rgb, prob_thresh=prob_thresh)
