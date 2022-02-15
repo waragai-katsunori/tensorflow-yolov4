@@ -43,12 +43,10 @@ from .utils.weights import (
 from ..common.base_class import BaseClass
 
 physical_devices = tf.config.experimental.list_physical_devices("GPU")
-if len(physical_devices) > 0:
+
 for i in range(len(physical_devices)):
     tf.config.experimental.set_memory_growth(physical_devices[i], True)
     print(f"Call tf.config.experimental.set_memory_growth(GPU{i}, True)")
-
-tf.enable_eager_execution()
 
 with tf.Graph().as_default():
     class YOLOv4(BaseClass):
